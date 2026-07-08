@@ -1,0 +1,43 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+*.pyc
+*.pyo
+
+# Large binaries (downloaded, not source code)
+bin/opencode/opencode.exe
+bin/opencode-windows-x64.zip
+
+# Logs
+logs/
+backend/*.log
+backend/*.err
+bin/*.log
+bin/*.err
+
+# Runtime database (opencode session data)
+data/opencode/*.db
+data/opencode/*.db-shm
+data/opencode/*.db-wal
+
+# Secrets - API keys, NEVER commit
+data/opencode/auth.json
+config/opencode/opencode.json
+config/opencode/opencode.json.bak
+
+# User workspace data (runtime)
+workspace/uploads/
+workspace/test_unpacked/
+
+# Test / temp scripts
+backend/check.js
+
+# Node
+node_modules/
+
+# OS
+Thumbs.db
+.DS_Store
+
+data/opencode/log/
+data/opencode/tool-output/

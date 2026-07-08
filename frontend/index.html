@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI4P 专利 AI Agent 平台</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; background: #f7f7f8; color: #1a1a1a; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #666; font-size: 12px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 360px; gap: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .left, .right { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; }
+  .workflows { display: flex; gap: 6px; margin: 10px 0; flex-wrap: wrap; }
+  .wf { padding: 7px 12px; border: 2px solid #d4d4d8; border-radius: 8px; cursor: pointer; font-size: 12.5px; user-select: none; }
+  .wf.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; font-weight: 600; }
+  textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; resize: vertical; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  button.run { padding: 8px 22px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  button.run:disabled { background: #9ca3af; }
+  .status { margin-top: 12px; font-size: 13px; color: #2563eb; min-height: 20px; }
+  .panel { margin-top: 8px; background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px; padding: 14px; min-height: 80px; max-height: 60vh; overflow-y: auto; }
+  .md h1 { font-size: 18px; border-bottom: 2px solid #2563eb; padding-bottom: 4px; margin: 14px 0 8px; }
+  .md h2 { font-size: 16px; margin: 12px 0 6px; color: #1e40af; }
+  .md h3 { font-size: 14px; margin: 10px 0 5px; color: #1e3a8a; }
+  .md p { margin: 6px 0; line-height: 1.7; }
+  .md table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; }
+  .md th, .md td { border: 1px solid #d0d0d0; padding: 5px 8px; text-align: left; }
+  .md th { background: #f0f4ff; }
+  .md code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+  .md pre { background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  .md ul, .md ol { margin: 5px 0; padding-left: 20px; }
+  .md strong { color: #b91c1c; }
+  .qa-sep { border-top: 2px dashed #93c5fd; margin: 14px 0 8px; padding-top: 6px; }
+  .qa-q { color: #2563eb; font-size: 13px; margin-bottom: 4px; }
+  .qa-a { color: #888; font-size: 12px; margin-bottom: 6px; }
+  .ftitle { font-size: 12px; color: #888; margin: 10px 0 4px; font-weight: 600; }
+  .file-row { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 12.5px; }
+  .file-row .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-row .fsize { color: #999; font-size: 11px; }
+  .fbtn { font-size: 11px; padding: 2px 8px; border-radius: 4px; text-decoration: none; cursor: pointer; border: 1px solid #ccc; background: #fff; color: #333; }
+  .fbtn.del { color: #dc2626; border-color: #fca5a5; }
+  .upload-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  input[type=file] { font-size: 11px; flex: 1; }
+  .sel-hint { font-size: 11px; color: #2563eb; }
+  .dot { animation: blink 1s infinite; display: inline-block; }
+  @keyframes blink { 50% { opacity: .3; } }
+</style>
+</head>
+<body>
+<div id="configOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#f7f7f8;z-index:999;padding:40px 20px;overflow-y:auto">
+  <div style="max-width:460px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,.1)">
+    <h2 style="margin:0 0 6px">⚙️ 首次配置</h2>
+    <p style="color:#666;font-size:13px;margin:0 0 18px">填入大模型的 API 信息，保存后即可使用。</p>
+    <label style="font-size:12px;color:#555">Provider 名称</label>
+    <input id="cfgProvider" value="agent-plan" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <label style="font-size:12px;color:#555">Base URL（API 地址）</label>
+    <input id="cfgBaseURL" value="https://ark.cn-beijing.volces.com/api/plan/v3" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <label style="font-size:12px;color:#555">API Key</label>
+    <input id="cfgApiKey" placeholder="粘贴你的 API Key" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <label style="font-size:12px;color:#555">模型名称</label>
+    <input id="cfgModel" value="glm-5.2" style="width:100%;padding:8px;margin:4px 0 16px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <button class="run" style="width:100%;padding:10px" onclick="saveConfig()">保存并开始使用</button>
+  </div>
+</div>
+<h1>AI4P 专利 AI Agent 平台 <span style="font-size:13px;cursor:pointer;color:#2563eb" onclick="document.getElementById('configOverlay').style.display='block'">⚙️设置</span></h1>
+<div class="sub">6 大专利模块 · 文件上传/下载 · 多轮追问</div>
+
+<div class="grid">
+<div class="left">
+  <div class="workflows" id="wfs">
+    <div class="wf active" data-wf="idea">💡 IDEA评审</div>
+    <div class="wf" data-wf="analyze">📊 业界专利分析</div>
+    <div class="wf" data-wf="roadmap">🛣️ 技术路线</div>
+    <div class="wf" data-wf="search">🔍 创新性检索</div>
+    <div class="wf" data-wf="pct">📋 PCT评审</div>
+    <div class="wf" data-wf="cfp">⚖️ 侵权挖掘</div>
+  </div>
+  <textarea id="input" rows="3" placeholder="在此输入技术构想/专利内容/方案..."></textarea>
+  <div class="row">
+    <button class="run" id="runBtn" onclick="run(false)">执行 ▶</button>
+    <input id="model" value="agent-plan/glm-5.2" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px;width:170px;">
+    <span class="sel-hint" id="selHint"></span>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="panel" id="output">结果将在这里显示...</div>
+  <div id="followup" style="display:none;margin-top:10px">
+    <div style="font-size:12px;color:#666;margin-bottom:4px">💬 就上面的结果继续追问（同一 session，agent 记得上下文）：</div>
+    <textarea id="followupInput" rows="2" style="height:46px" placeholder="继续提问..."></textarea>
+    <button class="run" style="padding:5px 16px;font-size:13px;margin-top:4px" onclick="run(true)">追问 ▶</button>
+  </div>
+</div>
+
+<div class="right">
+  <div class="ftitle">📂 文件管理</div>
+  <div class="upload-row">
+    <input type="file" id="fileInput" multiple>
+    <button class="run" style="padding:5px 12px;font-size:12px" onclick="uploadFiles()">上传</button>
+  </div>
+  <div id="fileList"></div>
+</div>
+</div>
+
+<script>
+const TEMPLATES = {
+  idea: "请加载 patent-IDEA-analyzer skill，对以下技术构想进行IDEA评审与发明点提炼：1)可专利性初判 2)发明点清单 3)独立权利要求初稿 4)保护策略建议\n\n",
+  analyze: "请加载 storage-patent-deepdive skill，对以下专利进行业界专利分析：逐篇解读技术方案、权利要求保护边界，评估参考价值或威胁。\n\n",
+  roadmap: "请加载 patent-roadmap skill，对以下一批专利进行技术路线分析：分类、演进脉络、热点空白、未来预测。\n\n",
+  search: "请加载 Patent Scanner skill，对以下技术方案进行创新性检索：检索现有技术、新颖性/创造性分析、申请结论、权利要求调整建议。\n\n",
+  pct: "请加载 patent-pct-review skill，对以下专利申请进行PCT五维度评审：创新性/可规避性/市场价值/落地产品/可取证性，给PCT建议。\n\n",
+  cfp: "请加载 seek-cfp-patent skill，进行高价值侵权挖掘：侵权线索、友商证据、逐元素比对、claim chart初稿。\n\n",
+};
+let curWf = "idea";
+const wfInputs = {};
+document.querySelectorAll(".wf").forEach(el => el.onclick = () => {
+  wfInputs[curWf] = document.getElementById("input").value;
+  document.querySelectorAll(".wf").forEach(e => e.classList.remove("active"));
+  el.classList.add("active");
+  curWf = el.dataset.wf;
+  document.getElementById("input").value = wfInputs[curWf] || "";
+});
+
+let selectedFiles = new Set();
+let currentSessionId = null;
+let refreshTimer = null;
+
+async function loadFiles() {
+  try {
+    const r = await fetch("/api/files");
+    const data = await r.json();
+    const el = document.getElementById("fileList");
+    let html = "";
+    if (data.uploads.length) {
+      html += "<div class='ftitle'>上传文件（勾选=喂给模型）</div>";
+      data.uploads.forEach(f => {
+        const ck = selectedFiles.has(f.name) ? "checked" : "";
+        html += `<div class="file-row"><input type="checkbox" class="fcheck" value="${f.name}" ${ck} onchange="toggleSel('${f.name}',this.checked)"><span class="fname">📎 ${f.name}</span><span class="fsize">${(f.size/1024).toFixed(1)}K</span><a class="fbtn" href="/api/download/${encodeURIComponent(f.name)}">下载</a><button class="fbtn del" onclick="delFile('${f.name}')">删</button></div>`;
+      });
+    }
+    if (data.generated.length) {
+      html += "<div class='ftitle'>模型生成文件</div>";
+      data.generated.forEach(f => {
+        html += `<div class="file-row"><span class="fname">🆕 ${f.name}</span><span class="fsize">${(f.size/1024).toFixed(1)}K</span><a class="fbtn" href="/api/download/${encodeURIComponent(f.name)}">下载</a></div>`;
+      });
+    }
+    if (!data.uploads.length && !data.generated.length) html = "<div class='ftitle'>暂无文件</div>";
+    el.innerHTML = html;
+    updateSelHint();
+  } catch(e) {}
+}
+function toggleSel(n,on){ if(on) selectedFiles.add(n); else selectedFiles.delete(n); updateSelHint(); }
+function updateSelHint(){ document.getElementById("selHint").textContent = selectedFiles.size ? `📎 已选${selectedFiles.size}文件` : ""; }
+async function uploadFiles(){
+  const inp = document.getElementById("fileInput");
+  if(!inp.files.length) return;
+  const fd = new FormData();
+  for(const f of inp.files) fd.append("files", f);
+  await fetch("/api/upload", {method:"POST", body: fd});
+  inp.value = ""; loadFiles();
+}
+async function delFile(name){
+  if(!confirm("删除 "+name+"?")) return;
+  await fetch("/api/files/"+encodeURIComponent(name), {method:"DELETE"});
+  selectedFiles.delete(name); loadFiles();
+}
+
+async function run(isFollowup) {
+  let text, sid = null;
+  if (isFollowup) {
+    text = document.getElementById("followupInput").value.trim();
+    if (!text) return;
+    document.getElementById("followupInput").value = "";
+    sid = currentSessionId;
+  } else {
+    text = document.getElementById("input").value.trim();
+    if (!text && !selectedFiles.size) { alert("请输入内容或选文件"); return; }
+  }
+  const model = document.getElementById("model").value.trim() || "agent-plan/glm-5.2";
+  const files = isFollowup ? [] : [...selectedFiles];
+  const fileHint = files.length ? `\n\n（请同时读取附带的文件：${files.join("、")}）` : "";
+  const prompt = isFollowup ? text : (TEMPLATES[curWf] + text + fileHint + "\n\n（重要：直接对话输出，不要Write工具创建文件。聚焦核心结论，控制篇幅确保结论完整。）");
+
+  const out = document.getElementById("output");
+  if (!isFollowup) {
+    out.innerHTML = ""; out.className = "panel"; currentSessionId = null;
+  } else {
+    const sep = document.createElement("div"); sep.className = "qa-sep"; out.appendChild(sep);
+    const qd = document.createElement("div"); qd.className = "qa-q"; qd.textContent = "❓ 追问：" + text; out.appendChild(qp = qd);
+    out.className = "panel";
+  }
+  document.getElementById("status").innerHTML = '<span class="dot">⏳</span> ' + (isFollowup ? "追问中..." : "agent 工作中（可能1-3分钟）...");
+  document.getElementById("runBtn").disabled = true;
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadFiles, 4000);
+  const t0 = Date.now();
+  let chunks = [];
+  try {
+    const resp = await fetch("/api/run", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({text: prompt, model, files, session_id: sid})});
+    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    while (true) {
+      const {done, value} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream:true});
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, idx); buf = buf.slice(idx+2);
+        const line = block.split("\n").find(l => l.startsWith("data: ")); if (!line) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          if (evt.type === "output") { chunks.push(evt.text); }
+          else if (evt.type === "step") { /* 可选：显示步骤 */ }
+          else if (evt.type === "status") document.getElementById("status").innerHTML = '<span class="dot">⏳</span> ' + evt.text;
+          else if (evt.type === "done") {
+            if (evt.session_id) { currentSessionId = evt.session_id; document.getElementById("followup").style.display = "block"; }
+            const md = evt.result || chunks.join("\n");
+            const div = document.createElement("div");
+            if (window.marked) div.innerHTML = marked.parse(md); else div.textContent = md;
+            div.className = "md";
+            // 清掉"结果将在这里"占位
+            if (out.textContent.startsWith("结果将在这里")) out.innerHTML = "";
+            out.appendChild(div);
+            const dt = ((Date.now()-t0)/1000).toFixed(1);
+            document.getElementById("status").textContent = "✅ 完成 · " + dt + "s" + (currentSessionId ? " · 可追问" : "");
+          } else if (evt.type === "error") document.getElementById("status").textContent = "❌ " + evt.error;
+        } catch(e) {}
+      }
+    }
+  } catch(e) { document.getElementById("status").textContent = "❌ " + e; }
+  document.getElementById("runBtn").disabled = false;
+  clearInterval(refreshTimer);
+  loadFiles();
+}
+
+async function loadConfig() {
+  try {
+    const r = await fetch("/api/config");
+    const c = await r.json();
+    if (!c.configured) document.getElementById("configOverlay").style.display = "block";
+    if (c.provider) document.getElementById("cfgProvider").value = c.provider;
+    if (c.model) document.getElementById("cfgModel").value = c.model;
+    if (c.baseURL) document.getElementById("cfgBaseURL").value = c.baseURL;
+    document.getElementById("model").value = (c.provider ? c.provider + "/" : "") + (c.model || "glm-5.2");
+  } catch(e) {}
+}
+function openConfig() { document.getElementById("configOverlay").style.display = "block"; }
+async function saveConfig() {
+  const body = {
+    provider: document.getElementById("cfgProvider").value,
+    baseURL: document.getElementById("cfgBaseURL").value,
+    apiKey: document.getElementById("cfgApiKey").value,
+    model: document.getElementById("cfgModel").value,
+  };
+  try {
+    const r = await fetch("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    const c = await r.json();
+    if (c.ok) {
+      document.getElementById("configOverlay").style.display = "none";
+      document.getElementById("model").value = c.model;
+      alert("✅ 配置成功！可以开始使用了。");
+    } else { alert("配置失败: " + (c.error || "未知错误")); }
+  } catch(e) { alert("请求失败: " + e); }
+}
+loadFiles();
+loadConfig();
+loadFiles();
+setInterval(() => { if (!document.getElementById("runBtn").disabled) loadFiles(); }, 15000);
+</script>
+</body>
+</html>

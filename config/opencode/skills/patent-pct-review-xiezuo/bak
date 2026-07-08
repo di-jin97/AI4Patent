@@ -1,0 +1,256 @@
+---
+name: patent-pct-review
+description: 评审专利是否需要申请 PCT。用户提供一个 Excel（Priority sheet，每行一个专利，专利号在 Patent Ref 列）和一个文件夹（含每个专利对应的申请文件 PDF/DOC/DOCX）。Claude 逐个读取申请文件、用语言能力分析、给 5 维度打分（1-5 分）并算出总分、生成填好 6 列结果的 Excel 副本。目标进入 PCT 比例约 40%。触发场景：用户提到"专利评审"、"PCT 评审"、"判断专利是否进 PCT"、"patent PCT review"。
+---
+
+# Patent PCT Review
+
+## 重要原则
+
+- **你就是执行者**，没有后台程序，不要"启动技能"后等待
+- **不要写大 Python 脚本**——分析专利靠你自己的语言能力，脚本做不到这件事
+- **读一个 → 评一个 → 落盘 → 立刻读下一个**，不要先批量读完所有文件
+- **一口气干完**，循环中不要停下来汇报或确认
+- **打分基于你独立分析说明书的结果**，不要被申请文件的夸张语言或 Excel 的 Significance 牵着走
+- 5 列评价文字要和你给的分数一致——不能文字写得很正面但分数却很低
+- **所有临时文件（reviews.jsonl、scored.json、raw.txt 等）都建在当前工作目录下**，不要用 /tmp/
+
+## 输入与输出
+
+**输入**：Excel（Priority sheet，表头第 2 行，数据第 3 行起）+ 专利申请文件夹（PDF/DOC/DOCX）
+
+**输出**：原 Excel 副本，填好 6 列：发明概述（≤200字）、市场价值（≤100字）、创新性（≤100字）、取证手段（≤100字，含方式+难度）、可规避性（≤100字）、Paris Convention Deployment Suggestion（"进PCT"/"不进PCT"）
+
+---
+
+## 第 1 步：读 Excel 列名和专利号列表
+
+只做一件事：拿到列名映射和专利号+行号列表，**不读任何其他字段，不做任何分析**。
+
+```bash
+python -c "
+import openpyxl
+wb = openpyxl.load_workbook('your_file.xlsx', data_only=True)
+ws = wb['Priority']
+headers = {cell.value: idx+1 for idx, cell in enumerate(ws[2]) if cell.value}
+print('列号映射:', headers)
+patents = []
+for row in ws.iter_rows(min_row=5, values_only=False):
+    ref = row[headers['Patent Ref']-1].value
+    if not ref:
+        continue
+    patents.append((row[0].row, str(ref).strip()))
+print(f'共 {len(patents)} 个专利：')
+for row_num, ref in patents:
+    print(f'  行{row_num}: {ref}')
+"
+```
+
+记下列号映射和专利清单。**立刻开始第 2 步，对第 1 个专利执行 (a)~(e)**。
+
+---
+
+## 第 2 步：逐个专利分析（核心工作）
+
+**每个专利完整跑完 (a)~(e) 五步才能开始下一个。**
+
+### (a) 从 Excel 读当前这个专利的详细字段
+
+从第 1 步拿到的专利清单里，按顺序取第 N 个专利的行号，**只读这一行**：
+
+```bash
+python -c "
+import openpyxl
+wb = openpyxl.load_workbook('your_file.xlsx', data_only=True)
+ws = wb['Priority']
+headers = {cell.value: idx+1 for idx, cell in enumerate(ws[2]) if cell.value}
+
+# 把 <行号> 替换成当前专利的实际行号，例如第 1 个专利是行 5，第 2 个是行 6，依此类推
+row_num = <行号>
+row = list(ws.iter_rows(min_row=row_num, max_row=row_num, values_only=True))[0]
+
+print('Patent Ref:',   row[headers['Patent Ref']-1])
+print('新申请总结:',    row[headers.get('新申请总结', 1)-1])
+print('Evaluation History:', row[headers.get('Evaluation History', 1)-1])
+print('Whether Adopted:',    row[headers.get('Whether Adopted By Product Or Solution Comments', 1)-1])
+print('Significance:',       row[headers.get('Significance', 1)-1])
+"
+```
+
+读完这一行的字段后，**立刻进入 (b)**，不要去读下一个专利的数据。
+
+### (b) 找到并读取申请文件，抽取关键段
+
+注意：`scripts/` 目录在 skill 文件夹里（`C:\Users\j00815423\.claude\skills\patent-pct-review\scripts\`），不是当前工作目录。
+
+```bash
+python -c "
+import glob, re, docx
+
+patent_ref = 'CN20231...'  # 替换成当前专利号
+digits = re.sub(r'[^0-9]', '', patent_ref)
+
+files = [f for f in glob.glob('**/*.docx', recursive=True) if digits in re.sub(r'[^0-9]', '', f)]
+filepath = files[0]
+print('读取文件:', filepath)
+
+text = '\n'.join(p.text for p in docx.Document(filepath).paragraphs)
+with open('./raw.txt', 'w', encoding='utf-8') as f:
+    f.write(text)
+"
+
+python "C:\Users\j00815423\.claude\skills\patent-pct-review\scripts\extract_key_sections.py" ./raw.txt
+
+# 分析完后清空 raw.txt
+python -c "open('./raw.txt', 'w').close()"
+```
+
+### (c) 精读分析 + 打 5 维度分（你的核心工作，不写任何代码）
+
+读完关键段，带着以下问题在脑子里走一遍，然后**直接在回复里写出 5 列评价和 5 维度分数**：
+
+1. 解决什么实际问题？背景描述的痛点真实，还是为凑专利硬找的？
+2. 技术方案核心是什么？一句话能讲清楚吗？讲不清楚说明在堆砌
+3. 独立权利要求 1 的关键技术特征是结构性创新还是文字游戏？
+4. 与现有技术的区别是结构性、算法性、还是参数性？参数性含金量最低
+5. "有益效果"有量化数据还是只有"显著提升"之类空话？
+6. 产品使用时外部能否观察到痕迹？机械结构/规格参数可见 = 易取证；内部算法/固件 = 难取证
+7. 想绕开有几种替代路径？竞品改个参数能不能避开？
+8. 这个方案在什么具体场景能用？是凑功能还是解决核心痛点？
+
+**红旗信号（出现就扣分，不被申请文件吹嘘带跑）**：
+- "显著优于"、"突破性"、"填补空白"等词，但没有具体数据或对比实验支撑
+- 权利要求只是把已知方案换个词包装（如"智能算法"代替"机器学习"）
+- 有益效果全是相对描述（"提升性能"、"降低成本"），无任何数字
+- 实施例没有真实测试数据，只有"以本发明实施例的设备进行测试"
+- 权利要求保护范围明显过窄，只能覆盖一种特定参数组合
+
+**5 维度打分（1-5 分，可小数；这批专利整体有创新性，分数是相对比较）**：
+
+| 字段 | 低分（1-2）相对较弱 | 高分（4-5）相对突出 |
+|---|---|---|
+| `innovation_score` 创新性 | 参数调整或已知方案组合，无说服力的对比数据 | 核心机制/结构有真实技术壁垒，现有技术路线里没有的方案 |
+| `market_value_score` 市场价值 | 场景极窄或模糊，市场需求不明确 | 主流产品核心技术瓶颈，需求迫切且市场规模大 |
+| `circumvention_score` 抗规避性 | 换个参数或实现方式即可规避 | 核心路径被覆盖，替代方案不可行或成本极高 |
+| `evidence_score` 取证便利性 | 需逆向固件/内部工艺才能判定 | 产品外观、规格参数或拆机即可直接判断 |
+| `landing_score` 落地程度 | 无产品应用记录（从 Evaluation History / Whether Adopted 列判断） | 已批量应用主力产品或列入下一代规划 |
+
+**算出总分 = 5 个分数之和（范围 5~25）**，一并写在回复里。
+
+### (d) 落盘——写完 JSON 才能进下一个
+
+把刚才分析写出的评价和分数立刻写入 `./reviews.jsonl`（第一个专利运行前先 `rm -f ./reviews.jsonl`）：
+
+```bash
+python -c "
+import json
+record = {
+    'patent_ref': 'CN20231...',
+    'row_number': 5,
+    'invention_summary': '...',
+    'market_value': '...',
+    'innovation_text': '...',
+    'evidence_text': '...',
+    'circumvention_text': '...',
+    'innovation_score': 4.0,
+    'market_value_score': 3.5,
+    'circumvention_score': 4.0,
+    'evidence_score': 3.0,
+    'landing_score': 2.5,
+    'total_score': 17.0,
+}
+with open('./reviews.jsonl', 'a', encoding='utf-8') as f:
+    f.write(json.dumps(record, ensure_ascii=False) + '\n')
+print('已写入:', record['patent_ref'], '总分:', record['total_score'])
+"
+```
+
+**确认看到 `已写入: ...` 输出后，才进入 (e)。**
+
+### (e) 立刻进入下一个专利
+
+丢掉当前专利全文，从专利清单里取**下一个**专利的行号，回到 (a) 读那一行的 Excel 字段。不停顿。
+
+---
+
+## 第 3 步：排序 + 写 Excel
+
+所有专利评完后，`./reviews.jsonl` 里已有每个专利的总分，直接按总分从高到低排序，取前约 40% 进 PCT：
+
+```bash
+python -c "
+import json, sys
+sys.path.insert(0, r'C:\Users\j00815423\.claude\skills\patent-pct-review\scripts')
+from score_and_decide import score_and_decide, summarize
+reviews = [json.loads(l) for l in open('./reviews.jsonl', encoding='utf-8') if l.strip()]
+results = score_and_decide(reviews)
+summarize(results)
+with open('./scored.json', 'w', encoding='utf-8') as f:
+    json.dump(results, f, ensure_ascii=False)
+"
+```
+
+⚠️ 进 PCT 数量必须大于 0，比例在 35%~45%。如全是"不进PCT"说明落盘有问题，检查 (d) 步。
+
+⚠️ 写 Excel 时直接用 `it['final_decision']` 字段填 Paris Convention 列，不要自己重新判断。
+
+写 Excel（按列名定位，每列只写对应内容，不要串列；**只写第 5 行起的数据行，不动第 1/3/4 行**）：
+
+```bash
+python << 'PYEOF'
+import shutil, json, openpyxl
+
+INPUT  = 'input.xlsx'
+OUTPUT = 'input_reviewed.xlsx'
+
+shutil.copy(INPUT, OUTPUT)
+wb = openpyxl.load_workbook(OUTPUT)
+ws = wb['Priority']
+
+# 第 2 行是列名
+headers = {c.value: idx+1 for idx, c in enumerate(ws[2]) if c.value}
+
+reviews = {r['patent_ref']: r for r in (json.loads(l) for l in open('./reviews.jsonl', encoding='utf-8') if l.strip())}
+scored  = json.load(open('./scored.json', encoding='utf-8'))
+
+for it in scored:
+    r, row = reviews[it['patent_ref']], it['row_number']
+    # 只写第 5 行及以后的数据行
+    if row < 5:
+        continue
+    ws.cell(row=row, column=headers['发明概述']).value = r['invention_summary']
+    ws.cell(row=row, column=headers['市场价值']).value = r['market_value']
+    ws.cell(row=row, column=headers['创新性']).value   = r['innovation_text']
+    ws.cell(row=row, column=headers['取证手段']).value = r['evidence_text']
+    ws.cell(row=row, column=headers['可规避性']).value = r['circumvention_text']
+    ws.cell(row=row, column=headers['Paris Convention Deployment Suggestion']).value = it['final_decision']
+
+wb.save(OUTPUT)
+print(f'saved: {OUTPUT}')
+PYEOF
+```
+
+告诉用户：输出文件路径、评审总数、进/不进 PCT 比例。
+
+---
+
+## 5 列评价写作要点
+
+**发明概述**：解决什么问题 + 用什么方案 + 创新点。结合权利要求自己重写，不要复制申请文件语言，可参考 Evaluation History。
+
+**市场价值**：方案能用在什么场景/产品，是否已落地（从 Excel Evaluation History / Whether Adopted 判断）。已落地写出场景；未落地评估潜力。
+
+**创新性**：写出相对这批专利的创新程度，指出亮点和相对常规之处。不要一律否定——这批专利整体有创新性，要体现出差异。
+
+**取证手段**：取证方式（拆机/参数对比/逆向算法/第三方测试等）+ 取证难度（易/中/难）两方面都要写。
+
+**可规避性**：难规避（范围广、替代少）/ 中等（可绕但成本高）/ 易规避（限定过窄、改参数即可）。
+
+---
+
+## 辅助脚本
+
+位于 skill 文件夹：`C:\Users\j00815423\.claude\skills\patent-pct-review\scripts\`
+
+- **extract_key_sections.py**：从专利全文里抽取权利要求 + 背景 + 有益效果，≤1500 字
+- **score_and_decide.py**：按总分排序取前 40% 进 PCT
