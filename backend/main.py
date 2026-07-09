@@ -3,11 +3,11 @@ import shutil
 import logging
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from opencode_client import run_task
+from opencode_client import run_task, kill_current
 
 BASE = Path(__file__).resolve().parent.parent
 FRONTEND = BASE / "frontend"
@@ -35,6 +35,11 @@ app = FastAPI(title="AI4P 专利工作台")
 
 def sse(d):
     return f"data: {json.dumps(d, ensure_ascii=False)}\n\n"
+
+
+def _safe_name(name: str) -> str:
+    """Strip directory components to prevent path traversal."""
+    return Path(name).name
 
 
 @app.get("/api/health")
@@ -143,22 +148,24 @@ async def upload(files: list[UploadFile] = File(...)):
 
 @app.get("/api/download/{name}")
 async def download(name: str):
+    name = _safe_name(name)
     for d in [UPLOADS, WORKSPACE]:
         f = d / name
         if f.is_file():
             return FileResponse(str(f), filename=name)
-    return {"error": "not found"}
+    return JSONResponse({"error": "not found"}, status_code=404)
 
 
 @app.delete("/api/files/{name}")
 async def delete_file(name: str):
+    name = _safe_name(name)
     for d in [UPLOADS, WORKSPACE]:
         f = d / name
         if f.is_file():
             f.unlink()
             logger.info(f"删除文件: {name}")
             return {"deleted": name}
-    return {"error": "not found"}
+    return JSONResponse({"error": "not found"}, status_code=404)
 
 
 # ===== 任务执行 =====
@@ -185,6 +192,12 @@ async def run(task: Task):
             logger.exception(f"任务异常: {e}")
             yield sse({"type": "error", "error": f"{type(e).__name__}: {e}"})
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@app.post("/api/stop")
+async def stop():
+    kill_current()
+    return {"ok": True}
 
 
 @app.get("/")

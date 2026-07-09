@@ -105,7 +105,7 @@
 
 <script>
 const TEMPLATES = {
-  idea: "请加载 patent-IDEA-analyzer skill，对以下技术构想进行IDEA评审与发明点提炼：1)可专利性初判 2)发明点清单 3)独立权利要求初稿 4)保护策略建议\n\n",
+  idea: "请加载 patent-IDEA-analyzer skill，处理以下内容：\n\n",
   analyze: "请加载 storage-patent-deepdive skill，对以下专利进行业界专利分析：逐篇解读技术方案、权利要求保护边界，评估参考价值或威胁。\n\n",
   roadmap: "请加载 patent-roadmap skill，对以下一批专利进行技术路线分析：分类、演进脉络、热点空白、未来预测。\n\n",
   search: "请加载 Patent Scanner skill，对以下技术方案进行创新性检索：检索现有技术、新颖性/创造性分析、申请结论、权利要求调整建议。\n\n",
@@ -180,7 +180,7 @@ async function run(isFollowup) {
   const model = document.getElementById("model").value.trim() || "agent-plan/glm-5.2";
   const files = isFollowup ? [] : [...selectedFiles];
   const fileHint = files.length ? `\n\n（请同时读取附带的文件：${files.join("、")}）` : "";
-  const prompt = isFollowup ? text : (TEMPLATES[curWf] + text + fileHint + "\n\n（重要：直接对话输出，不要Write工具创建文件。聚焦核心结论，控制篇幅确保结论完整。）");
+  const prompt = isFollowup ? text : (TEMPLATES[curWf] + text + fileHint + "\n\n（重要：请按skill流程完整执行全部步骤。生成的报告文件保存到当前工作目录。全程不要向用户提问或等待确认，所有信息自行推断，一口气完成。）");
 
   const out = document.getElementById("output");
   if (!isFollowup) {
