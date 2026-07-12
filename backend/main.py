@@ -30,6 +30,8 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger("ai4p")
+# Suppress noisy uvicorn access logs (200 OK on every /api/files poll etc.)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 app = FastAPI(title="AI4P 专利工作台")
 
@@ -197,8 +199,15 @@ async def run(task: Task):
             logger.info(f"任务开始: model={task.model}, {tag}")
             yield sse({"type": "status", "text": "已提交，agent 工作中..." if not task.session_id else "追问中..."})
             async for evt in run_task(task.text, task.model, task.files, task.session_id, task_id):
-                if evt["type"] == "output":
-                    logger.info(f"  | {evt['text'][:200]}")
+                et = evt.get("type")
+                if et == "output":
+                    logger.info(f"  [output] {evt['text'][:2000]}")
+                elif et == "log":
+                    raw_t = evt.get("event_type", "?")
+                    part = evt.get("part", {})
+                    logger.info(f"  [{raw_t}] {json.dumps(part, ensure_ascii=False)[:1000]}")
+                elif et == "step":
+                    logger.info("  [step]")
                 yield sse(evt)
             logger.info("任务完成")
         except Exception as e:

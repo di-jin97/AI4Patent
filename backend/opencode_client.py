@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import uuid
+import logging
 import json as _json
 from pathlib import Path
 
@@ -13,6 +14,34 @@ DEFAULT_MODEL = "agent-plan/glm-5.2"
 _ANSI = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 _IDLE_TIMEOUT = 300  # seconds without output before killing subprocess
 _procs = {}  # task_id -> proc, supports parallel execution
+logger = logging.getLogger("ai4p")
+
+
+def _log_event(t, part):
+    """Log every opencode event type (tool calls, reasoning, steps, etc.)."""
+    if t == "text":
+        txt = (part.get("text") or "").strip()
+        if txt:
+            logger.info(f"  | {txt[:2000]}")
+    elif t == "tool_start":
+        tool = part.get("tool", "?")
+        inp = part.get("input", {})
+        logger.info(f"  [tool_start] {tool}: {_json.dumps(inp, ensure_ascii=False)[:1000]}")
+    elif t == "tool_finish":
+        tool = part.get("tool", "?")
+        out = part.get("output", part.get("result", ""))
+        out_s = out if isinstance(out, str) else _json.dumps(out, ensure_ascii=False)
+        logger.info(f"  [tool_finish] {tool}: {out_s[:1000]}")
+    elif t == "reasoning":
+        txt = (part.get("text") or "").strip()
+        if txt:
+            logger.info(f"  [reasoning] {txt[:1000]}")
+    elif t == "step_start":
+        logger.info(f"  [step_start] {_json.dumps(part, ensure_ascii=False)[:500]}")
+    elif t == "step_finish":
+        logger.info(f"  [step_finish] {_json.dumps(part, ensure_ascii=False)[:500]}")
+    else:
+        logger.info(f"  [{t}] {_json.dumps(part, ensure_ascii=False)[:500]}")
 
 
 def kill_task(task_id):
@@ -87,11 +116,14 @@ async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None, task_
                     sid = evt["sessionID"]
                 t = evt.get("type")
                 part = evt.get("part") or {}
+                _log_event(t, part)
                 if t == "text" and part.get("text"):
                     texts.append(part["text"])
                     yield {"type": "output", "text": part["text"]}
                 elif t == "step_start":
                     yield {"type": "step"}
+                else:
+                    yield {"type": "log", "event_type": t, "part": part}
         # flush remaining buffer after EOF (last line without trailing newline)
         if buf.strip():
             line = _ANSI.sub("", buf.strip())
@@ -102,9 +134,14 @@ async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None, task_
                         sid = evt["sessionID"]
                     t = evt.get("type")
                     part = evt.get("part") or {}
+                    _log_event(t, part)
                     if t == "text" and part.get("text"):
                         texts.append(part["text"])
                         yield {"type": "output", "text": part["text"]}
+                    elif t == "step_start":
+                        yield {"type": "step"}
+                    else:
+                        yield {"type": "log", "event_type": t, "part": part}
                 except Exception:
                     pass
     finally:
