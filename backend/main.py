@@ -1,13 +1,14 @@
 import json
 import shutil
 import logging
+import uuid
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from opencode_client import run_task, kill_current
+from opencode_client import run_task, kill_current, kill_task
 
 BASE = Path(__file__).resolve().parent.parent
 FRONTEND = BASE / "frontend"
@@ -178,12 +179,14 @@ class Task(BaseModel):
 
 @app.post("/api/run")
 async def run(task: Task):
+    task_id = str(uuid.uuid4())
     async def gen():
+        yield sse({"type": "task_id", "task_id": task_id})
         try:
             tag = f"续接session={task.session_id[:16]}" if task.session_id else f"附带文件={task.files}"
             logger.info(f"任务开始: model={task.model}, {tag}")
             yield sse({"type": "status", "text": "已提交，agent 工作中..." if not task.session_id else "追问中..."})
-            async for evt in run_task(task.text, task.model, task.files, task.session_id):
+            async for evt in run_task(task.text, task.model, task.files, task.session_id, task_id):
                 if evt["type"] == "output":
                     logger.info(f"  | {evt['text'][:200]}")
                 yield sse(evt)
@@ -195,8 +198,12 @@ async def run(task: Task):
 
 
 @app.post("/api/stop")
-async def stop():
-    kill_current()
+async def stop(task_id: str | None = None):
+    """Stop a specific task (by task_id) or all running tasks."""
+    if task_id:
+        kill_task(task_id)
+    else:
+        kill_current()
     return {"ok": True}
 
 

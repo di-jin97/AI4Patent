@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import uuid
 import json as _json
 from pathlib import Path
 
@@ -11,7 +12,16 @@ UPLOADS = WORKSPACE / "uploads"
 DEFAULT_MODEL = "agent-plan/glm-5.2"
 _ANSI = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 _IDLE_TIMEOUT = 300  # seconds without output before killing subprocess
-_proc = None  # track current subprocess for cancellation
+_procs = {}  # task_id -> proc, supports parallel execution
+
+
+def kill_task(task_id):
+    """Kill a specific running task by task_id."""
+    proc = _procs.get(task_id)
+    if proc and proc.returncode is None:
+        proc.kill()
+        return True
+    return False
 
 
 def _env():
@@ -23,15 +33,15 @@ def _env():
 
 
 def kill_current():
-    """Kill the running opencode subprocess (if any). Called by /api/stop."""
-    global _proc
-    if _proc and _proc.returncode is None:
-        _proc.kill()
+    """Kill all running tasks. Called by /api/stop when no task_id given."""
+    for proc in list(_procs.values()):
+        if proc and proc.returncode is None:
+            proc.kill()
 
 
-async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None):
-    """opencode run --format json。session_id 不为空时续接该 session（追问）。"""
-    global _proc
+async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None, task_id=None):
+    """opencode run --format json。session_id 不为空时续接该 session（追问）。
+    task_id 用于多模块并行时追踪/停止单个任务。"""
     args = [OPENCODE_EXE, "run", "--format", "json", text]
     if session_id:
         args += ["--session", session_id]
@@ -48,7 +58,9 @@ async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None):
         env=_env(),
         cwd=str(WORKSPACE),
     )
-    _proc = proc
+    if task_id is None:
+        task_id = str(uuid.uuid4())
+    _procs[task_id] = proc
     sid = None
     texts = []
     buf = ""
@@ -99,5 +111,5 @@ async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None):
         if proc.returncode is None:
             proc.kill()
         await proc.wait()
-        _proc = None
+        _procs.pop(task_id, None)
     yield {"type": "done", "result": "\n".join(texts), "session_id": sid}

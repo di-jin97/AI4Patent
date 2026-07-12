@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -15,12 +15,16 @@
   .left, .right { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; }
   .workflows { display: flex; gap: 6px; margin: 10px 0; flex-wrap: wrap; }
   .wf { padding: 7px 12px; border: 2px solid #d4d4d8; border-radius: 8px; cursor: pointer; font-size: 12.5px; user-select: none; }
-  .wf.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; font-weight: 600; }
-  textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; resize: vertical; }
-  .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-  button.run { padding: 8px 22px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
-  button.run:disabled { background: #9ca3af; }
-  .status { margin-top: 12px; font-size: 13px; color: #2563eb; min-height: 20px; }
+ .wf.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; font-weight: 600; }
+  .wf.running { border-color: #f59e0b; position: relative; }
+  .wf.running::after { content: ""; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background: #f59e0b; border-radius: 50%; animation: blink 1s infinite; }
+ textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; resize: vertical; }
+ .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+ button.run { padding: 8px 22px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+ button.run:disabled { background: #9ca3af; }
+  button.stop { padding: 8px 16px; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  button.stop:disabled { background: #fca5a5; }
+ .status { margin-top: 12px; font-size: 13px; color: #2563eb; min-height: 20px; }
   .panel { margin-top: 8px; background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px; padding: 14px; min-height: 80px; max-height: 60vh; overflow-y: auto; }
   .md h1 { font-size: 18px; border-bottom: 2px solid #2563eb; padding-bottom: 4px; margin: 14px 0 8px; }
   .md h2 { font-size: 16px; margin: 12px 0 6px; color: #1e40af; }
@@ -66,22 +70,22 @@
   </div>
 </div>
 <h1>AI4P 专利 AI Agent 平台 <span style="font-size:13px;cursor:pointer;color:#2563eb" onclick="document.getElementById('configOverlay').style.display='block'">⚙️设置</span></h1>
-<div class="sub">6 大专利模块 · 文件上传/下载 · 多轮追问</div>
+<div class="sub">5 大专利模块 · 文件上传/下载 · 多轮追问</div>
 
 <div class="grid">
 <div class="left">
   <div class="workflows" id="wfs">
-    <div class="wf active" data-wf="idea">💡 IDEA评审</div>
+    <div class="wf active" data-wf="idea">💡 专利IDEA评审</div>
     <div class="wf" data-wf="analyze">📊 业界专利分析</div>
-    <div class="wf" data-wf="roadmap">🛣️ 技术路线</div>
-    <div class="wf" data-wf="search">🔍 创新性检索</div>
-    <div class="wf" data-wf="pct">📋 PCT评审</div>
+    <div class="wf" data-wf="pct">📋 PCT申请评审</div>
+    <div class="wf" data-wf="value">💰 专利价值评估</div>
     <div class="wf" data-wf="cfp">⚖️ 侵权挖掘</div>
   </div>
-  <textarea id="input" rows="3" placeholder="在此输入技术构想/专利内容/方案..."></textarea>
+  <textarea id="input" rows="3" placeholder=""></textarea>
   <div class="row">
-    <button class="run" id="runBtn" onclick="run(false)">执行 ▶</button>
-    <input id="model" value="agent-plan/glm-5.2" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px;width:170px;">
+   <button class="run" id="runBtn" onclick="run(false)">执行 ▶</button>
+    <button class="stop" id="stopBtn" style="display:none" onclick="stopCurrent()">⏹ 停止</button>
+   <input id="model" value="agent-plan/glm-5.2" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px;width:170px;">
     <span class="sel-hint" id="selHint"></span>
   </div>
   <div class="status" id="status"></div>
@@ -105,26 +109,72 @@
 
 <script>
 const TEMPLATES = {
-  idea: "请加载 patent-IDEA-analyzer skill，处理以下内容：\n\n",
-  analyze: "请加载 storage-patent-deepdive skill，对以下专利进行业界专利分析：逐篇解读技术方案、权利要求保护边界，评估参考价值或威胁。\n\n",
-  roadmap: "请加载 patent-roadmap skill，对以下一批专利进行技术路线分析：分类、演进脉络、热点空白、未来预测。\n\n",
-  search: "请加载 Patent Scanner skill，对以下技术方案进行创新性检索：检索现有技术、新颖性/创造性分析、申请结论、权利要求调整建议。\n\n",
-  pct: "请加载 patent-pct-review skill，对以下专利申请进行PCT五维度评审：创新性/可规避性/市场价值/落地产品/可取证性，给PCT建议。\n\n",
-  cfp: "请加载 seek-cfp-patent skill，进行高价值侵权挖掘：侵权线索、友商证据、逐元素比对、claim chart初稿。\n\n",
+  idea: "请加载 patent-IDEA-analyzer skill，对以下专利Idea进行新颖性与创造性审查：检索现有技术、三步法分析、出具审查意见模拟报告。\n\n",
+  analyze: "请加载 storage-patent-deepdive skill，对以下存储领域专利进行深度剖析与竞争态势分析：分类标引、技术方案摘要、价值评分、Claim 1要件分解、竞争格局分析、技术趋势研判。\n\n",
+  pct: "请加载 patent-pct-review skill，对以下专利申请进行PCT五维度评审：创新性/可规避性/市场价值/落地产品/可取证性，排序后给PCT建议。\n\n",
+  value: "请加载 patent-value-assessment skill，对以下已授权专利进行价值评估：从权利要求稳定性、技术创新程度、业界侵权使用证据、技术时效性四个维度分析，输出价值等级（A/B/C/D）及维持或放弃建议。\n\n",
+  cfp: "请加载 seek-cfp-patent skill，对以下专利进行侵权挖掘：拆分Claim 1技术特征、搜索友商产品、逐特征加权比对、输出侵权分析报告。\n\n",
 };
 let curWf = "idea";
-const wfInputs = {};
-document.querySelectorAll(".wf").forEach(el => el.onclick = () => {
-  wfInputs[curWf] = document.getElementById("input").value;
-  document.querySelectorAll(".wf").forEach(e => e.classList.remove("active"));
-  el.classList.add("active");
-  curWf = el.dataset.wf;
-  document.getElementById("input").value = wfInputs[curWf] || "";
+const PLACEHOLDERS = {
+  idea: "输入专利Idea描述、权利要求草稿或方案概述...",
+  analyze: "输入专利号列表（SSD/HDD/NVMe/NAND/分布式存储等）...",
+  pct: "输入专利号列表或描述专利申请内容...",
+  value: "输入已授权专利号或描述专利技术方案...",
+  cfp: "输入专利号及第一权利要求（Claim 1全文）...",
+};
+const WF_KEYS = ["idea", "analyze", "pct", "value", "cfp"];
+const wfState = {};
+WF_KEYS.forEach(k => {
+  wfState[k] = {
+    input: "",
+    outputHtml: "",
+    statusHtml: "",
+    sessionId: null,
+    running: false,
+    taskId: null,
+    followupVisible: false,
+    followupInput: "",
+  };
 });
-
 let selectedFiles = new Set();
-let currentSessionId = null;
-let refreshTimer = null;
+let filePollTimer = null;
+
+function switchTab(newWf) {
+  if (newWf === curWf) return;
+  const s = wfState[curWf];
+  s.input = document.getElementById("input").value;
+  s.outputHtml = document.getElementById("output").innerHTML;
+  s.statusHtml = document.getElementById("status").innerHTML;
+  s.followupInput = document.getElementById("followupInput").value;
+  s.followupVisible = document.getElementById("followup").style.display !== "none";
+  document.querySelectorAll(".wf").forEach(e => e.classList.remove("active"));
+  document.querySelector('.wf[data-wf="' + newWf + '"]').classList.add("active");
+  curWf = newWf;
+  const ns = wfState[newWf];
+  document.getElementById("input").value = ns.input;
+  document.getElementById("input").placeholder = PLACEHOLDERS[newWf] || "";
+  document.getElementById("output").innerHTML = ns.outputHtml || "结果将在这里显示...";
+  document.getElementById("status").innerHTML = ns.statusHtml;
+  document.getElementById("followupInput").value = ns.followupInput;
+  document.getElementById("followup").style.display = ns.followupVisible ? "block" : "none";
+  document.getElementById("runBtn").disabled = ns.running;
+  document.getElementById("stopBtn").style.display = ns.running ? "inline-block" : "none";
+}
+document.querySelectorAll(".wf").forEach(el => el.onclick = () => switchTab(el.dataset.wf));
+
+function updateTabIndicator(wfKey, running) {
+  const tab = document.querySelector('.wf[data-wf="' + wfKey + '"]');
+  if (tab) tab.classList.toggle("running", running);
+}
+function anyRunning() { return WF_KEYS.some(k => wfState[k].running); }
+function startFilePollingIfNeeded() {
+  if (filePollTimer) return;
+  filePollTimer = setInterval(() => {
+    loadFiles();
+    if (!anyRunning()) { clearInterval(filePollTimer); filePollTimer = null; }
+  }, 4000);
+}
 
 async function loadFiles() {
   try {
@@ -167,33 +217,43 @@ async function delFile(name){
 }
 
 async function run(isFollowup) {
+  const wfKey = curWf;
+  const s = wfState[wfKey];
   let text, sid = null;
   if (isFollowup) {
     text = document.getElementById("followupInput").value.trim();
     if (!text) return;
     document.getElementById("followupInput").value = "";
-    sid = currentSessionId;
+    s.followupInput = "";
+    sid = s.sessionId;
   } else {
     text = document.getElementById("input").value.trim();
     if (!text && !selectedFiles.size) { alert("请输入内容或选文件"); return; }
   }
   const model = document.getElementById("model").value.trim() || "agent-plan/glm-5.2";
   const files = isFollowup ? [] : [...selectedFiles];
-  const fileHint = files.length ? `\n\n（请同时读取附带的文件：${files.join("、")}）` : "";
-  const prompt = isFollowup ? text : (TEMPLATES[curWf] + text + fileHint + "\n\n（重要：请按skill流程完整执行全部步骤。生成的报告文件保存到当前工作目录。全程不要向用户提问或等待确认，所有信息自行推断，一口气完成。）");
+  const fileHint = files.length ? `\n\n（请同时读取附带的文件：${files.join("、")})` : "";
+  const prompt = isFollowup ? text : (TEMPLATES[wfKey] + text + fileHint + "\n\n（重要：请按skill流程完整执行全部步骤，全程在对话中输出分析结果，默认不要生成任何文件。全程不要向用户提问或等待确认，所有信息自行推断，一口气完成。）");
 
-  const out = document.getElementById("output");
-  if (!isFollowup) {
-    out.innerHTML = ""; out.className = "panel"; currentSessionId = null;
+  s.running = true; s.taskId = null;
+  updateTabIndicator(wfKey, true);
+  startFilePollingIfNeeded();
+  if (wfKey === curWf) {
+    const out = document.getElementById("output");
+    if (!isFollowup) {
+      out.innerHTML = ""; out.className = "panel";
+    } else {
+      const sep = document.createElement("div"); sep.className = "qa-sep"; out.appendChild(sep);
+      const qd = document.createElement("div"); qd.className = "qa-q"; qd.textContent = "❓ 追问：" + text; out.appendChild(qd);
+    }
+    document.getElementById("runBtn").disabled = true;
+    document.getElementById("stopBtn").style.display = "inline-block";
+    const statusEl = document.getElementById("status");
+    statusEl.innerHTML = '<span class="dot">⏳</span> ' + (isFollowup ? "追问中..." : "agent 工作中（可能1-3分钟）...");
+    s.statusHtml = statusEl.innerHTML;
   } else {
-    const sep = document.createElement("div"); sep.className = "qa-sep"; out.appendChild(sep);
-    const qd = document.createElement("div"); qd.className = "qa-q"; qd.textContent = "❓ 追问：" + text; out.appendChild(qp = qd);
-    out.className = "panel";
+    s.statusHtml = '<span class="dot">⏳</span> 后台运行中...';
   }
-  document.getElementById("status").innerHTML = '<span class="dot">⏳</span> ' + (isFollowup ? "追问中..." : "agent 工作中（可能1-3分钟）...");
-  document.getElementById("runBtn").disabled = true;
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = setInterval(loadFiles, 4000);
   const t0 = Date.now();
   let chunks = [];
   try {
@@ -208,28 +268,62 @@ async function run(isFollowup) {
         const line = block.split("\n").find(l => l.startsWith("data: ")); if (!line) continue;
         try {
           const evt = JSON.parse(line.slice(6));
-          if (evt.type === "output") { chunks.push(evt.text); }
-          else if (evt.type === "step") { /* 可选：显示步骤 */ }
-          else if (evt.type === "status") document.getElementById("status").innerHTML = '<span class="dot">⏳</span> ' + evt.text;
+          if (evt.type === "task_id") { s.taskId = evt.task_id; }
+          else if (evt.type === "output") { chunks.push(evt.text); }
+          else if (evt.type === "step") { }
+          else if (evt.type === "status") {
+            const html = '<span class="dot">⏳</span> ' + evt.text;
+            s.statusHtml = html;
+            if (wfKey === curWf) document.getElementById("status").innerHTML = html;
+          }
           else if (evt.type === "done") {
-            if (evt.session_id) { currentSessionId = evt.session_id; document.getElementById("followup").style.display = "block"; }
+            if (evt.session_id) { s.sessionId = evt.session_id; s.followupVisible = true; }
             const md = evt.result || chunks.join("\n");
             const div = document.createElement("div");
             if (window.marked) div.innerHTML = marked.parse(md); else div.textContent = md;
             div.className = "md";
-            // 清掉"结果将在这里"占位
-            if (out.textContent.startsWith("结果将在这里")) out.innerHTML = "";
-            out.appendChild(div);
-            const dt = ((Date.now()-t0)/1000).toFixed(1);
-            document.getElementById("status").textContent = "✅ 完成 · " + dt + "s" + (currentSessionId ? " · 可追问" : "");
-          } else if (evt.type === "error") document.getElementById("status").textContent = "❌ " + evt.error;
+            if (wfKey === curWf) {
+              const out = document.getElementById("output");
+              if (out.textContent.startsWith("结果将在这里")) out.innerHTML = "";
+              out.appendChild(div);
+              if (evt.session_id) document.getElementById("followup").style.display = "block";
+              const dt = ((Date.now()-t0)/1000).toFixed(1);
+              document.getElementById("status").textContent = "✅ 完成 · " + dt + "s" + (s.sessionId ? " · 可追问" : "");
+              s.statusHtml = document.getElementById("status").innerHTML;
+              s.outputHtml = out.innerHTML;
+            } else {
+              const tmp = document.createElement("div");
+              if (window.marked) tmp.innerHTML = marked.parse(md); else tmp.textContent = md;
+              s.outputHtml = tmp.innerHTML;
+              const dt = ((Date.now()-t0)/1000).toFixed(1);
+              s.statusHtml = "✅ 完成 · " + dt + "s" + (s.sessionId ? " · 可追问" : "");
+            }
+          } else if (evt.type === "error") {
+            s.statusHtml = "❌ " + evt.error;
+            if (wfKey === curWf) document.getElementById("status").textContent = "❌ " + evt.error;
+          }
         } catch(e) {}
       }
     }
-  } catch(e) { document.getElementById("status").textContent = "❌ " + e; }
-  document.getElementById("runBtn").disabled = false;
-  clearInterval(refreshTimer);
+  } catch(e) {
+    s.statusHtml = "❌ " + e;
+    if (wfKey === curWf) document.getElementById("status").textContent = "❌ " + e;
+  }
+  s.running = false; s.taskId = null;
+  updateTabIndicator(wfKey, false);
+  if (wfKey === curWf) {
+    document.getElementById("runBtn").disabled = false;
+    document.getElementById("stopBtn").style.display = "none";
+  }
   loadFiles();
+}
+
+async function stopCurrent() {
+  const s = wfState[curWf];
+  if (!s.running || !s.taskId) return;
+  try {
+    await fetch("/api/stop?task_id=" + encodeURIComponent(s.taskId), {method:"POST"});
+  } catch(e) {}
 }
 
 async function loadConfig() {
@@ -261,10 +355,10 @@ async function saveConfig() {
     } else { alert("配置失败: " + (c.error || "未知错误")); }
   } catch(e) { alert("请求失败: " + e); }
 }
+document.getElementById("input").placeholder = PLACEHOLDERS[curWf] || "";
 loadFiles();
 loadConfig();
-loadFiles();
-setInterval(() => { if (!document.getElementById("runBtn").disabled) loadFiles(); }, 15000);
+setInterval(() => { if (!anyRunning()) loadFiles(); }, 15000);
 </script>
 </body>
 </html>
