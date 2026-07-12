@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 backend/.venv/
 backend/__pycache__/
 *.pyc
@@ -22,7 +22,6 @@ data/opencode/*.db-wal
 
 # Secrets - API keys, NEVER commit
 data/opencode/auth.json
-config/opencode/opencode.json
 config/opencode/opencode.json.bak
 
 # User workspace data (runtime)
