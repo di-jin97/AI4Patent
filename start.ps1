@@ -1,6 +1,7 @@
 ﻿$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
 $env:PYTHONIOENCODING = 'utf-8'
 $ROOT = $PSScriptRoot
+$PORT = 8001
 $venv = "$ROOT\backend\.venv"
 
 # 0. 确保必要目录存在
@@ -16,21 +17,21 @@ Write-Host "[2/3] 检查依赖..." -ForegroundColor Cyan
 
 # 2. 启动 FastAPI（后台无窗口）
 $apiUp = $false
-try { $apiUp = (Invoke-RestMethod "http://localhost:8001/api/health" -TimeoutSec 2).ok } catch {}
+try { $apiUp = (Invoke-RestMethod "http://localhost:$PORT/api/health" -TimeoutSec 2).ok } catch {}
 if (-not $apiUp) {
     Write-Host "[3/3] 启动服务..." -ForegroundColor Cyan
-    Start-Process -FilePath "$venv\Scripts\python.exe" -ArgumentList "-m","uvicorn","main:app","--port","8001" -WorkingDirectory "$ROOT\backend" -WindowStyle Hidden -RedirectStandardOutput "$ROOT\logs\server.log" -RedirectStandardError "$ROOT\logs\server.err"
+    Start-Process -FilePath "$venv\Scripts\python.exe" -ArgumentList "-m","uvicorn","main:app","--port","$PORT" -WorkingDirectory "$ROOT\backend" -WindowStyle Hidden -RedirectStandardOutput "$ROOT\logs\server.log" -RedirectStandardError "$ROOT\logs\server.err"
     Start-Sleep 5
 } else {
     Write-Host "[3/3] 服务已在运行" -ForegroundColor Green
 }
 
 # 3. 开浏览器
-Start-Process "http://localhost:8001"
+Start-Process "http://localhost:$PORT"
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " AI4P 专利工作台已启动" -ForegroundColor Cyan
-Write-Host " 地址: http://localhost:8001" -ForegroundColor Yellow
+Write-Host " 地址: http://localhost:$PORT" -ForegroundColor Yellow
 Write-Host " 日志: logs\server.log + logs\ai4p.log" -ForegroundColor Yellow
 Write-Host " 停止: 任务管理器结束 python.exe" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
