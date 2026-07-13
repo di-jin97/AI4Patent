@@ -104,7 +104,7 @@ async def save_config(req: ConfigReq):
             provider: {
                 "name": provider,
                 "npm": "@ai-sdk/openai-compatible",
-                "options": {"apiKey": apiKey, "baseURL": baseURL},
+                "options": {"baseURL": baseURL},
                 "models": {
                     model: {"name": model, "limit": {"context": 1048576, "output": 16384}}
                 }
