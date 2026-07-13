@@ -8,58 +8,156 @@
 
 ---
 
+## 2026-07-13: P0-01 Architecture Verification
+
+### 修改内容
+
+1. **新建 `docs/architecture-verification.md`**
+   - 扫描并记录项目运行环境 (Python 3.12.3, Pydantic 2.13.4, FastAPI 0.139.0, OpenCode 1.17.18)
+   - 确认 DeepSeek v4-pro provider + Exa remote MCP 配置
+   - 记录仓库事实: 无测试文件, `backend/patent_analysis/` 目录不存在
+   - 区分已证实项与未证实项
+   - 关键决策: SQLite 存储, Pydantic v2 Schema, Exa Bridge 方案, feature flag 回滚
+
+### Git 提交
+- `docs: add architecture verification report and development log (P0-01)`
+
+---
+
 ## 2026-07-13: P0-03 State/Evidence Schema, IDs, Validation
 
 ### 修改内容
 
 1. **新建 `backend/patent_analysis/` 模块结构**
-   - `__init__.py`: 包初始化与版本声明
-   - `domain/__init__.py`: 模块导出
-
-2. **新建 `backend/patent_analysis/domain/models.py`** - 核心 Pydantic 数据模型
-   - `CaseStatus` enum (19 个状态值)
-   - `Feature`, `EvidenceRef`, `EvidenceItem` - 特征与证据模型
-   - `PriorArtDocument`, `PatentFamily` - 文献模型
-   - `SearchPlan`, `Query`, `SearchRun` - 检索模型
-   - `FullTextRecord`, `RankingResult` - 排序与全文
-   - `NoveltyEvaluationResult`, `InventiveStepRoute`, `InventiveStepResult` - 评估模型
-   - `CommercialValueResult`, `QualityGateResult` - 商业与质量
-   - `ExecutionBudget` - 预算控制
-   - `PatentCaseState` - 根部案件状态 (schema_version=1.0)
-   - `CaseError`, `TraceEvent`, `Artifact` - 辅助模型
-   - 所有 ID 使用 Pydantic regex pattern 验证
-
-3. **新建 `backend/patent_analysis/domain/ids.py`** - Stable ID 生成器
-   - 计数器式 ID 生成 (F-*, DOC-*, EV-*, ROUTE-*, Q-*)
-   - 各类型独立计数器，每实例隔离
-   - 支持前缀别名 (FEATURE→F, DOCUMENT→DOC, EVIDENCE→EV)
-
-4. **新建 `backend/patent_analysis/domain/dates.py`** - 日期工具函数
-   - `normalize_date`: ISO/中文/斜杠格式 → ISO 8601
-   - `parse_date`: 字符串 → date 对象
-   - `is_before_priority_date`: 比较文档日与优先权日
-   - `is_valid_prior_art`: 判断文档是否为有效现有技术
-
-5. **新建 `backend/patent_analysis/domain/validation.py`** - 验证器
-   - `EvidenceValidator`: 验证证据完整性 (URL/位置/引用/置信度)
-   - `DateValidator`: 验证文献日期有效性
-   - `FeatureCoverageValidator`: 验证特征覆盖完整性
-   - `QualityGate`: 综合质量门 (拦截无证据/无效日期/不充分证据的结论)
-   - `QualityGateIssue`: 标准化问题输出
-
-6. **新建 `backend/tests/patent_analysis/unit/test_domain.py`** - 单元测试 (37 测试)
-   - IDGeneration 5 测试
-   - Date parsing/validation 8 测试
-   - EvidenceValidator 5 测试
-   - DateValidator 3 测试
-   - FeatureCoverageValidator 3 测试
-   - Model 验证 9 测试
-   - QualityGate 3 测试
+2. **新建 `domain/models.py`** - 核心 Pydantic 数据模型 (19 个状态, 20+ 模型类)
+3. **新建 `domain/ids.py`** - Stable ID 生成器 (F-*, DOC-*, EV-*, ROUTE-*, Q-*)
+4. **新建 `domain/dates.py`** - 日期工具 (normalize, parse, priority date validation)
+5. **新建 `domain/validation.py`** - 证据/日期/特征覆盖/QualityGate 验证器
+6. **新建 37 单元测试** - ID, 日期, 证据, 验证器, 模型, QualityGate
 
 ### Git 提交
 - `feat(P0-03): add state/evidence schema, ID generator, dates, validators with 37 unit tests`
 
 ---
 
+## 2026-07-13: P0-04 State Store, Workflow Kernel
 
+### 修改内容
 
+1. **新建 `workflow/transitions.py`** - 完整状态机迁移规则 (19 个状态, 所有合法 transition)
+2. **新建 `workflow/budget.py`** - BudgetManager + 四模式默认预算 (Quick/Standard/Deep/Commercial)
+3. **新建 `workflow/orchestrator.py`** - WorkflowStep 接口 + WorkflowOrchestrator 编排器
+4. **新建 `persistence/state_store.py`** - SQLite 存储 (cases, checkpoints, idempotency_keys 三表)
+5. **新建 24 workflow 测试** - 状态迁移规则, 预算管理, StateStore CRUD/幂等/checkpoint/cancel
+
+### Git 提交
+- `feat(P0-04): add state store, workflow kernel, transitions, budget manager with 24 workflow tests`
+
+---
+
+## 2026-07-13: P0-05 Provider and Document Pipeline
+
+### 修改内容
+
+1. **新建 `adapters/base.py`** - SearchProvider 抽象接口 + SearchRequest/Response, FetchRequest/Response
+2. **新建 `adapters/exa.py`** - ExaAdapter (通过 OpenCode MCP bridge 调用 Exa 工具)
+3. **新建 `adapters/opencode_mcp_bridge.py`** - OpenCode MCP bridge (子进程执行 MCP 调用)
+4. **新建 `adapters/fake.py`** - FakeSearchProvider (离线测试用)
+5. **新建 `services/documents.py`** - URL/专利号规范化, 去重, 排序, 文档 hash, Google Patents URL 拼接
+6. **新建 23 provider 测试** - fake provider 搜索/抓取/调用追踪, URL 规范化, 专利号规范化, 去重, 排序
+
+### Git 提交
+- `feat(P0-05): add SearchProvider, ExaAdapter, OpenCode MCP bridge, fake provider, document normalizer/dedupe/ranker with 23 provider tests`
+
+---
+
+## 2026-07-13: P0-06 Evidence, Novelty and Quality Gate
+
+### 修改内容
+
+1. **新建 `services/evidence.py`** - 证据提取/验证/特征映射/覆盖矩阵
+2. **新建 `services/novelty.py`** - 新颖性评估引擎 (单文献完全覆盖→not-novel)
+3. **新建 `services/quality.py`** - Quality Gate 服务 (拦截无证据/无效日期的确定性结论)
+4. **新建 13 service 测试** - 证据提取/序列 ID, 证据验证, 特征映射, 覆盖矩阵, 新颖性四场景, Quality Gate
+
+### Git 提交
+- `feat(P0-06): add evidence extraction, novelty evaluation engine, quality gate service with 13 service tests`
+
+---
+
+## 2026-07-13: P0-02 Golden Baseline Fixtures
+
+### 修改内容
+
+1. **新建 `tests/patent_analysis/golden/fixtures.py`** - 7 个 Golden 场景 fixture:
+   - 单篇完整覆盖 (not-novel)
+   - 多文献分别覆盖 (novel)
+   - D1+D2 有结合启示 (not-inventive)
+   - D2 无结合动机 (inventive)
+   - 晚公开日 (不应作为现有技术)
+   - Evidence 无定位 (Quality Gate 应拦截)
+   - 模糊 Idea (保守评估为 novel)
+2. **新建 `tests/patent_analysis/golden/test_golden.py`** - 10 Golden 断言测试
+3. **Golden runner** 批量执行所有场景并返回结构化结果
+
+### Git 提交
+- `test(P0-02): add golden baseline fixtures and 10 golden scenario tests (107 total)`
+
+---
+
+## 最终统计
+
+| 指标 | 数值 |
+|---|---|
+| 总测试数 | **107** (全部通过) |
+| 新增 Python 文件 | 20 |
+| 新增代码行数 | ~3000+ |
+| 实施阶段 | P0 (6/6 tasks) |
+| 下一步 | P1-01: Inventive step & commercial engines |
+
+### 目录结构
+
+```
+backend/patent_analysis/
+  __init__.py
+  domain/
+    __init__.py, models.py, ids.py, dates.py, validation.py
+  workflow/
+    __init__.py, transitions.py, budget.py, orchestrator.py
+  adapters/
+    __init__.py, base.py, exa.py, fake.py, opencode_mcp_bridge.py
+  services/
+    __init__.py, documents.py, evidence.py, novelty.py, quality.py
+  persistence/
+    __init__.py, state_store.py
+  renderers/  (待 P1-03 实现)
+  schemas/    (待 P1-03 实现)
+
+backend/tests/patent_analysis/
+  unit/
+    test_domain.py (37 tests)
+    test_workflow.py (24 tests)
+    test_adapters.py (23 tests)
+    test_services.py (13 tests)
+  golden/
+    fixtures.py, test_golden.py (10 tests)
+  contract/  (待实现)
+  integration/ (待实现)
+```
+
+### 设计合规性
+
+| 设计要求 | 状态 |
+|---|---|
+| 核心状态机 19 状态 | 已实现 |
+| Stable ID (F-*/DOC-*/EV-*/ROUTE-*) | 已实现 |
+| 证据必须可定位 (No Evidence → No Conclusion) | 已实现 |
+| 日期/优先权校验 | 已实现 |
+| 四模式预算 (Quick/Standard/Deep/Commercial) | 已实现 |
+| 幂等性 (idempotency key) | 已实现 |
+| Checkpoint 恢复 | 已实现 |
+| SQLite 状态存储 | 已实现 |
+| SearchProvider 可替换接口 | 已实现 |
+| Exa Adapter bridge | 已实现 |
+| Golden fixtures (离线可重现) | 已实现 (7/12 场景) |
+| 原始 Skill 未修改 | 已保留 |
