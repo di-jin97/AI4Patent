@@ -59,13 +59,13 @@
     <h2 style="margin:0 0 6px">⚙️ 首次配置</h2>
     <p style="color:#666;font-size:13px;margin:0 0 18px">填入大模型的 API 信息，保存后即可使用。</p>
     <label style="font-size:12px;color:#555">Provider 名称</label>
-    <input id="cfgProvider" value="agent-plan" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <input id="cfgProvider" value="deepseek" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
     <label style="font-size:12px;color:#555">Base URL（API 地址）</label>
-    <input id="cfgBaseURL" value="https://ark.cn-beijing.volces.com/api/plan/v3" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <input id="cfgBaseURL" value="https://api.deepseek.com/v1" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
     <label style="font-size:12px;color:#555">API Key</label>
     <input id="cfgApiKey" placeholder="粘贴你的 API Key" style="width:100%;padding:8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:6px;font-size:13px">
     <label style="font-size:12px;color:#555">模型名称</label>
-    <input id="cfgModel" value="glm-5.2" style="width:100%;padding:8px;margin:4px 0 16px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <input id="cfgModel" value="deepseek-v4-pro" style="width:100%;padding:8px;margin:4px 0 16px;border:1px solid #ccc;border-radius:6px;font-size:13px">
     <button class="run" style="width:100%;padding:10px" onclick="saveConfig()">保存并开始使用</button>
   </div>
 </div>
@@ -85,7 +85,7 @@
   <div class="row">
    <button class="run" id="runBtn" onclick="run(false)">执行 ▶</button>
     <button class="stop" id="stopBtn" style="display:none" onclick="stopCurrent()">⏹ 停止</button>
-   <input id="model" value="agent-plan/glm-5.2" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px;width:170px;">
+   <input id="model" value="deepseek/deepseek-v4-pro" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px;width:210px;">
     <span class="sel-hint" id="selHint"></span>
   </div>
   <div class="status" id="status"></div>
@@ -230,7 +230,7 @@ async function run(isFollowup) {
     text = document.getElementById("input").value.trim();
     if (!text && !selectedFiles.size) { alert("请输入内容或选文件"); return; }
   }
-  const model = document.getElementById("model").value.trim() || "agent-plan/glm-5.2";
+  const model = document.getElementById("model").value.trim() || "deepseek/deepseek-v4-pro";
   const files = isFollowup ? [] : [...selectedFiles];
   const fileHint = files.length ? `\n\n（请同时读取附带的文件：${files.join("、")})` : "";
   const prompt = isFollowup ? text : (TEMPLATES[wfKey] + text + fileHint + "\n\n（重要：请按skill流程完整执行全部步骤，全程在对话中输出分析结果，默认不要生成任何文件。全程不要向用户提问或等待确认，所有信息自行推断，一口气完成。）");
@@ -334,7 +334,7 @@ async function loadConfig() {
     if (c.provider) document.getElementById("cfgProvider").value = c.provider;
     if (c.model) document.getElementById("cfgModel").value = c.model;
     if (c.baseURL) document.getElementById("cfgBaseURL").value = c.baseURL;
-    document.getElementById("model").value = (c.provider ? c.provider + "/" : "") + (c.model || "glm-5.2");
+    document.getElementById("model").value = (c.provider ? c.provider + "/" : "") + (c.model || "deepseek-v4-pro");
   } catch(e) {}
 }
 function openConfig() { document.getElementById("configOverlay").style.display = "block"; }

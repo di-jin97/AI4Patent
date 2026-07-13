@@ -1,5 +1,5 @@
 import httpx, json, time, sys
-body = {"text":"只回答：收到","model":"agent-plan/glm-5.2","files":[],"session_id":None}
+body = {"text":"只回答：收到","model":"deepseek/deepseek-v4-pro","files":[],"session_id":None}
 t0=time.time(); nout=0
 with httpx.stream("POST","http://localhost:8001/api/run",json=body,timeout=120) as r:
     buf=""

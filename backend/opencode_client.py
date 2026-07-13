@@ -4,13 +4,26 @@ import re
 import uuid
 import logging
 import json as _json
+import shutil
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
-OPENCODE_EXE = str(BASE / "bin" / "opencode" / "opencode.exe")
+
+
+def _opencode_exe():
+    configured = os.environ.get("OPENCODE_EXE")
+    if configured:
+        return configured
+    system_opencode = shutil.which("opencode")
+    if system_opencode:
+        return system_opencode
+    return str(BASE / "bin" / "opencode" / "opencode.exe")
+
+
+OPENCODE_EXE = _opencode_exe()
 WORKSPACE = BASE / "workspace"
 UPLOADS = WORKSPACE / "uploads"
-DEFAULT_MODEL = "agent-plan/glm-5.2"
+DEFAULT_MODEL = "deepseek/deepseek-v4-pro"
 _ANSI = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 _IDLE_TIMEOUT = 300  # seconds without output before killing subprocess
 _procs = {}  # task_id -> proc, supports parallel execution
@@ -57,6 +70,7 @@ def _env():
     env = os.environ.copy()
     env["XDG_CONFIG_HOME"] = str(BASE / "config")
     env["XDG_DATA_HOME"] = str(BASE / "data")
+    env["XDG_STATE_HOME"] = str(BASE / "data")
     env["PYTHONIOENCODING"] = "utf-8"
     return env
 

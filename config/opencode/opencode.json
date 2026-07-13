@@ -1,20 +1,20 @@
 ﻿{
   "$schema": "https://opencode.ai/config.json",
-  "model": "agent-plan/glm-5.2",
+  "model": "deepseek/deepseek-v4-pro",
   "provider": {
-    "agent-plan": {
-      "name": "agent-plan",
+    "deepseek": {
+      "name": "deepseek",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "apiKey": "YOUR_API_KEY_HERE",
-        "baseURL": "https://ark.cn-beijing.volces.com/api/plan/v3"
+        "apiKey": "{file:/home/bok/code/patent_prototype/AI4Patent/config/opencode/secrets/deepseek-api-key}",
+        "baseURL": "https://api.deepseek.com/v1"
       },
       "models": {
-        "glm-5.2": {
-          "name": "glm-5.2",
+        "deepseek-v4-pro": {
+          "name": "deepseek-v4-pro",
           "limit": {
             "context": 1048576,
-            "output": 16384
+            "output": 393216
           }
         }
       }

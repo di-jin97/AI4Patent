@@ -18,6 +18,7 @@ UPLOADS.mkdir(parents=True, exist_ok=True)
 CONFIG_DIR = BASE / "config" / "opencode"
 DATA_DIR = BASE / "data" / "opencode"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+SECRET_DIR = CONFIG_DIR / "secrets"
 LOG_DIR = BASE / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -34,6 +35,23 @@ logger = logging.getLogger("ai4p")
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 app = FastAPI(title="AI4P 专利工作台")
+
+
+def _api_key_file_ref(provider: str) -> str:
+    return f"{{file:{SECRET_DIR / (provider + '-api-key')}}}"
+
+
+def _read_api_key_ref(value: str) -> str:
+    prefix = "{file:"
+    if not value.startswith(prefix) or not value.endswith("}"):
+        return value
+    key_path = Path(value[len(prefix):-1]).expanduser()
+    if not key_path.is_absolute():
+        key_path = BASE / key_path
+    try:
+        return key_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
 
 
 def sse(d):
@@ -58,7 +76,7 @@ async def get_config():
     result = {"configured": False, "provider": "", "model": "", "baseURL": "", "apiKey": ""}
     if cfg_path.exists():
         try:
-            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
             full_model = cfg.get("model", "")
             if "/" in full_model:
                 result["provider"] = full_model.split("/")[0]
@@ -67,6 +85,10 @@ async def get_config():
                 result["model"] = full_model
             p = cfg.get("provider", {}).get(result["provider"], {})
             result["baseURL"] = p.get("options", {}).get("baseURL", "")
+            cfg_key = _read_api_key_ref(p.get("options", {}).get("apiKey", ""))
+            if cfg_key:
+                result["configured"] = True
+                result["apiKey"] = cfg_key[:6] + "***" + cfg_key[-4:] if len(cfg_key) > 12 else "***"
         except Exception:
             pass
     if auth_path.exists():
@@ -83,20 +105,22 @@ async def get_config():
 
 
 class ConfigReq(BaseModel):
-    provider: str = "agent-plan"
-    model: str = "glm-5.2"
-    baseURL: str = "https://ark.cn-beijing.volces.com/api/plan/v3"
+    provider: str = "deepseek"
+    model: str = "deepseek-v4-pro"
+    baseURL: str = "https://api.deepseek.com/v1"
     apiKey: str = ""
 
 
 @app.post("/api/config")
 async def save_config(req: ConfigReq):
     provider = req.provider.strip() or "custom"
-    model = req.model.strip() or "glm-5.2"
+    model = req.model.strip() or "deepseek-v4-pro"
     baseURL = req.baseURL.strip()
     apiKey = req.apiKey.strip()
     if not apiKey:
         return {"ok": False, "error": "API Key 不能为空"}
+    SECRET_DIR.mkdir(parents=True, exist_ok=True)
+    (SECRET_DIR / f"{provider}-api-key").write_text(apiKey, encoding="utf-8")
     opencode_cfg = {
         "$schema": "https://opencode.ai/config.json",
         "model": f"{provider}/{model}",
@@ -104,9 +128,9 @@ async def save_config(req: ConfigReq):
             provider: {
                 "name": provider,
                 "npm": "@ai-sdk/openai-compatible",
-                "options": {"apiKey": apiKey, "baseURL": baseURL},
+                "options": {"apiKey": _api_key_file_ref(provider), "baseURL": baseURL},
                 "models": {
-                    model: {"name": model, "limit": {"context": 1048576, "output": 16384}}
+                    model: {"name": model, "limit": {"context": 1048576, "output": 393216}}
                 }
             }
         },
@@ -184,7 +208,7 @@ async def delete_file(name: str):
 # ===== 任务执行 =====
 class Task(BaseModel):
     text: str
-    model: str = "agent-plan/glm-5.2"
+    model: str = "deepseek/deepseek-v4-pro"
     files: list[str] = []
     session_id: str | None = None
 

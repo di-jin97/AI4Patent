@@ -41,11 +41,13 @@ cd AI4Patent
 1. 运行 `.\start.ps1`（或 `.\dev.ps1`）
 2. 浏览器打开 `http://localhost:8001`
 3. 首次访问会弹出配置框，填入：
-   - **Provider 名称**：如 `agent-plan`
-   - **Base URL**：如 `https://ark.cn-beijing.volces.com/api/plan/v3`
-   - **API Key**：你的模型 API Key
-   - **模型名称**：如 `glm-5.2`
+   - **Provider 名称**：`deepseek`
+   - **Base URL**：`https://api.deepseek.com/v1`
+   - **API Key**：你的 DeepSeek API Key
+   - **模型名称**：`deepseek-v4-flash`
 4. 点击保存即可使用
+
+本仓库已预置 DeepSeek Flash 配置，默认模型为 `deepseek/deepseek-v4-flash`。DeepSeek 的 OpenAI 兼容 API 地址配置为 `https://api.deepseek.com/v1`，模型名为 `deepseek-v4-flash`。
 
 ### 启动
 
