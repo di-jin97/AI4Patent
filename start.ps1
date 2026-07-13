@@ -1,4 +1,4 @@
-$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+﻿$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
 $env:PYTHONIOENCODING = 'utf-8'
 $ROOT = $PSScriptRoot
 $PORT = 8001
