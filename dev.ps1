@@ -11,7 +11,7 @@ if (-not (Test-Path "$venv\Scripts\python.exe") -or -not (Test-Path "$ROOT\bin\o
 }
 
 # 延迟开浏览器
-Start-Job -Command { Start-Sleep -Seconds 4; Start-Process "http://localhost:$PORT" } | Out-Null
+Start-Job -ScriptBlock { param($p) Start-Sleep -Seconds 4; Start-Process "http://localhost:$p" } -ArgumentList $PORT | Out-Null
 
 # 前台启动 FastAPI（日志实时显示 + 写 logs/ai4p.log）
 Write-Host ""
