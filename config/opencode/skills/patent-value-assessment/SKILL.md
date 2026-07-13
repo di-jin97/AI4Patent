@@ -1,4 +1,4 @@
----
+﻿---
 name: patent-value-assessment
 description: >
   评估已授权专利的综合价值，场景为专利清理（决定是否续费维持）。
@@ -51,7 +51,7 @@ description: >
 - 无效宣告历史（说明书封面或用户补充信息）
 - 主要独立权利要求之外的核心从属权利要求
 
-如用户只提供专利号而无全文，直接搜索获取授权文本：优先抓取 Google Patents（`https://patents.google.com/patent/<专利号>/zh`）或 SooPAT、国家知识产权局专利检索系统，提取权利要求书和说明书关键段落后继续分析，无需告知用户。搜索失败时再请用户上传全文。
+如用户只提供专利号而无全文，用 `exa_web_fetch_exa` 抓取 Google Patents 专利详情页获取授权文本：`exa_web_fetch_exa(urls=["https://patents.google.com/patent/<专利号>/en"], maxCharacters=100000)`，提取权利要求书和说明书关键段落后继续分析，无需告知用户。抓取失败时再请用户上传全文。
 
 ---
 

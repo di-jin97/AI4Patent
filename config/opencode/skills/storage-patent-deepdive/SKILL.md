@@ -1,4 +1,4 @@
----
+﻿---
 name: storage-patent-deepdive
 description: >
   存储领域专利深度剖析与竞争态势分析（精细化版）。输入一批存储专利
@@ -94,7 +94,7 @@ C. 两者都要
 使用 `exa_web_fetch_exa` 抓取 Google Patents 页面：
 
 ```
-https://patents.google.com/patent/{专利号}/
+exa_web_fetch_exa(urls=["https://patents.google.com/patent/{专利号}/en"], maxCharacters=100000)
 ```
 
 提取：标题、摘要、申请人、公开日、IPC/CPC、Claim 1、同族数、布局国家。不抓说明书全文。
@@ -706,7 +706,7 @@ Word报告聚焦**整体性分析**，不逐件罗列专利。全量逐件分析
 4. **趋势结论必须有专利号依据**：每条技术趋势和竞争判断引用具体专利号
 5. **画布建议要有约束力**：衍生方向必须能转化为具体专利标题草案
 6. **分类标准动态制定**：AI 浏览所有专利后，根据专利实际内容制定分类标准，提交用户审批后再执行分类
-7. **搜索工具规范**：抓取指定 URL（如 Google Patents）用 `exa_web_fetch_exa`；关键词搜索（如查技术细节/产品落地）用 `exa_web_search_exa`。禁止使用 `web_fetch`。
+7. **搜索工具规范**：抓取指定 URL（如 Google Patents）用 `exa_web_fetch_exa(urls=[...], maxCharacters=100000)`；关键词搜索（如查技术细节/产品落地）用 `exa_web_search_exa(query="...", numResults=20)`。禁止使用 `web_fetch`。
 8. **要件分解粒度要求**：Claim 1 分解时的「独立技术特征」指在结构/功能/效果上可与其他特征分离的最小单元，通常来自 Claim 1 中的分句/分号段
 9. **Excel-Word 分工明确**：全量专利的逐件分析（一句话方案+Claim要件分解）输出到 Excel；Word 报告只聚焦整体性分析（技术分类全景/竞争格局/趋势）和重点专利的深度剖析。二者互补，不重复。
 10. **话术：** When summarizing the analysis results of this patent, output it in Chinese first, and then provide the original English terms in parentheses for all English terms

@@ -1,4 +1,4 @@
----
+﻿---
 name: patent-pct-review
 description: >
   PCT申请必要性评审。输入Excel（Priority sheet）和同目录DOCX申请文件，
@@ -79,11 +79,11 @@ description: >
 
 #### c. 现有技术检索
 
-执行2次搜索（优先`exa_web_search_exa`）：
-- 第1次：从**技术问题**角度检索
-- 第2次：从**技术方案**角度检索
+执行2次搜索：
+- 第1次：`exa_web_search_exa(query="[技术问题关键词] patent OR paper", numResults=20)`
+- 第2次：`exa_web_search_exa(query="[技术方案关键词] patent OR paper", numResults=20)`
 
-无搜索工具时基于自身知识评分，在创新性字段注明"未执行检索"。
+若 `exa_web_search_exa` 返回结果不足，可补充基于自身知识评分，在创新性字段注明"基于知识库评分"。
 
 #### d. 评分与写入
 

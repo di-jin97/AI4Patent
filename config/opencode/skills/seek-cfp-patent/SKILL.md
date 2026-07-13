@@ -1,4 +1,4 @@
----
+﻿---
 name: seek-cfp-patent
 description: >
   STORAGE-domain patent infringement analysis: decompose Claim 1 → search competitor
@@ -266,8 +266,8 @@ Gate 通过友商数: 8（其中 ⚠️ 部分覆盖的 0 家）
 #### 3b — 搜索策略与预算管理
 
 **搜索计数规则（1次的定义）：**
-- `exa_web_search_exa(query, numResults=8)` = 1次
-- `exa_web_fetch_exa(url=...)` = 1次
+- `exa_web_search_exa(query="...", numResults=8)` = 1次
+- `exa_web_fetch_exa(urls=["..."], maxCharacters=100000)` = 1次
 
 **预算分配（每条专利上限25次）：**
 
