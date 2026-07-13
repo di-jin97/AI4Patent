@@ -100,7 +100,7 @@ async def save_config(req: ConfigReq):
     # 以 opencode.json.example 为模板生成配置（EXA MCP 等设置自动继承）
     example_path = CONFIG_DIR / "opencode.json.example"
     if example_path.exists():
-        opencode_cfg = json.loads(example_path.read_text(encoding="utf-8"))
+        opencode_cfg = json.loads(example_path.read_text(encoding="utf-8-sig"))
     else:
         opencode_cfg = {"$schema": "https://opencode.ai/config.json"}
     # 清除旧 provider，写入新 provider
