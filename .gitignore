@@ -6,7 +6,6 @@ backend/__pycache__/
 
 # Large binaries (downloaded, not source code)
 bin/opencode/opencode.exe
-bin/opencode-windows-x64.zip
 
 # Logs
 logs/
