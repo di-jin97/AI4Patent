@@ -1,4 +1,4 @@
-import json
+﻿import json
 import shutil
 import logging
 import uuid
@@ -97,29 +97,27 @@ async def save_config(req: ConfigReq):
     apiKey = req.apiKey.strip()
     if not apiKey:
         return {"ok": False, "error": "API Key 不能为空"}
-    opencode_cfg = {
-        "$schema": "https://opencode.ai/config.json",
-        "model": f"{provider}/{model}",
-        "provider": {
-            provider: {
-                "name": provider,
-                "npm": "@ai-sdk/openai-compatible",
-                "options": {"baseURL": baseURL},
-                "models": {
-                    model: {"name": model, "limit": {"context": 1048576, "output": 16384}}
-                }
+    # 以 opencode.json.example 为模板生成配置（EXA MCP 等设置自动继承）
+    example_path = CONFIG_DIR / "opencode.json.example"
+    if example_path.exists():
+        opencode_cfg = json.loads(example_path.read_text(encoding="utf-8"))
+    else:
+        opencode_cfg = {"$schema": "https://opencode.ai/config.json"}
+    # 清除旧 provider，写入新 provider
+    old_providers = list(opencode_cfg.get("provider", {}).keys())
+    for k in old_providers:
+        opencode_cfg["provider"].pop(k)
+    opencode_cfg["provider"] = {
+        provider: {
+            "name": provider,
+            "npm": "@ai-sdk/openai-compatible",
+            "options": {"apiKey": apiKey, "baseURL": baseURL},
+            "models": {
+                model: {"name": model, "limit": {"context": 1048576, "output": 16384}}
             }
-        },
-    }
-
-    # EXA MCP (search + fetch) is always included
-    opencode_cfg["mcp"] = {
-        "exa": {
-            "url": "https://mcp.exa.ai/mcp",
-            "type": "remote",
-            "enabled": True,
         }
     }
+    opencode_cfg["model"] = f"{provider}/{model}"
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     (CONFIG_DIR / "opencode.json").write_text(
         json.dumps(opencode_cfg, indent=2, ensure_ascii=False), encoding="utf-8"

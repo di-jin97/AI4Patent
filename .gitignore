@@ -4,6 +4,8 @@ backend/__pycache__/
 *.pyc
 *.pyo
 
+config/opencode/opencode.json
+
 # Large binaries (downloaded, not source code)
 bin/opencode/opencode.exe
 
