@@ -112,15 +112,14 @@ async def save_config(req: ConfigReq):
         },
     }
 
-    # Preserve MCP server config (EXA search etc.) if it already exists
-    cfg_path = CONFIG_DIR / "opencode.json"
-    if cfg_path.exists():
-        try:
-            old = json.loads(cfg_path.read_text(encoding="utf-8"))
-            if "mcp" in old:
-                opencode_cfg["mcp"] = old["mcp"]
-        except Exception:
-            pass
+    # EXA MCP (search + fetch) is always included
+    opencode_cfg["mcp"] = {
+        "exa": {
+            "url": "https://mcp.exa.ai/mcp",
+            "type": "remote",
+            "enabled": True,
+        }
+    }
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     (CONFIG_DIR / "opencode.json").write_text(
         json.dumps(opencode_cfg, indent=2, ensure_ascii=False), encoding="utf-8"

@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "https://opencode.ai/config.json",
   "model": "agent-plan/glm-5.2",
   "provider": {
@@ -6,7 +6,7 @@
       "name": "agent-plan",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "apiKey": "YOUR_API_KEY_HERE",
+        "apiKey": "ark-6aba576f-c254-4ea1-b5ed-5e5b32558ed6-9d0b8",
         "baseURL": "https://ark.cn-beijing.volces.com/api/plan/v3"
       },
       "models": {
@@ -23,8 +23,8 @@
   "mcp": {
     "exa": {
       "url": "https://mcp.exa.ai/mcp",
-      "type": "remote",
-      "enabled": true
+      "enabled": true,
+      "type": "remote"
     }
   }
 }
