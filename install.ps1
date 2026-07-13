@@ -3,6 +3,9 @@ $env:PYTHONIOENCODING = 'utf-8'
 $ROOT = $PSScriptRoot
 
 Write-Host ""
+
+# 设置执行策略，让后续 start/dev/stop 不被拦截
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host " AI4P 专利工作台 - 一键安装" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
