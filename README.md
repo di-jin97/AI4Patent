@@ -118,6 +118,39 @@ export GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true
 export IDEA_STRUCTURED_BETA_ENABLED=false
 ```
 
+### 从 `main` 集成结构化 IDEA 评审 1.0
+
+当前 `bok` 分支相对 `main` 集成了完整的结构化 IDEA 评审链路；它保留原
+`patent-IDEA-analyzer` 作为回滚路径，但默认入口已经切换至结构化流程。
+
+| 集成项 | 相对 `main` 的变化 | 主要位置 |
+| --- | --- | --- |
+| 案件工作流 | 新增可持久化 Case、状态机、SSE 进度、取消/恢复、预算与幂等 checkpoint | `backend/patent_analysis/workflow/`、`persistence/`、`api.py` |
+| 渐进式 Skills | 将原大 Skill 拆为需求、特征、检索规划、证据、创造性、商业、审查意见、报告 8 个 JSON 契约子 Skill | `config/opencode/skills/patent-*/`、`backend/patent_analysis/skills/` |
+| 自有专利 ToolCall | 新增 Google Patents 的检索、书目信息、全文章节、段落匹配、关系 ToolCall；含 robots 检查、限速、缓存与显式开关 | `backend/patent_analysis/tools/` |
+| 证据与结论 | 全文定位 EvidenceItem、新颖性矩阵、D1/D2 结合动机路线、质量门与商业预评估 | `backend/patent_analysis/steps.py`、`services/` |
+| 输出与界面 | 默认八章 Markdown/JSON，按请求生成 DOCX/XLSX；IDEA 页面默认选择结构化 1.0 | `services/renderers.py`、`frontend/index.html` |
+| 测试 | 新增 Provider fixture、Skill 契约、D1/D2 完整工作流、API/SSE、前端入口和导出测试 | `backend/tests/` |
+
+集成前安装新增依赖，然后执行全量回归：
+
+```bash
+backend/.venv/bin/pip install -r backend/requirements.txt
+backend/.venv/bin/python -m pytest backend/tests -q
+```
+
+预期结果为全部通过（当前基线为 131 项）。生产运行时需同时具备模型配置和
+`GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true`；未启用或来源拒绝访问时，案件会明确失败，
+不会以空结果生成新颖性结论。
+
+将已验证的 `bok` 集成回稳定分支时，建议在代码评审后执行：
+
+```bash
+git switch main
+git merge --no-ff bok
+git push origin main
+```
+
 ### 搜索 MCP 与密钥维护
 
 - **原 Skill 的 MCP 配置**：编辑 `config/opencode/opencode.json` 的 `mcp.exa`；可参考 `opencode.json.example`。
