@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import logging
 import uuid
@@ -10,6 +11,10 @@ from pydantic import BaseModel
 
 from opencode_client import run_task, kill_current, kill_task
 from security import mask_secret, safe_json, write_secret_file
+from patent_analysis.adapters.exa import ExaAdapter
+from patent_analysis.api import create_router
+from patent_analysis.persistence.state_store import StateStore
+from patent_analysis.workflow.orchestrator import WorkflowOrchestrator
 
 BASE = Path(__file__).resolve().parent.parent
 FRONTEND = BASE / "frontend"
@@ -20,6 +25,7 @@ CONFIG_DIR = BASE / "config" / "opencode"
 DATA_DIR = BASE / "data" / "opencode"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 SECRET_DIR = CONFIG_DIR / "secrets"
+CASES_DIR = WORKSPACE / "cases"
 LOG_DIR = BASE / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -36,6 +42,14 @@ logger = logging.getLogger("ai4p")
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 app = FastAPI(title="AI4P 专利工作台")
+STRUCTURED_IDEA_BETA_ENABLED = os.environ.get("IDEA_STRUCTURED_BETA_ENABLED", "false").lower() == "true"
+_case_store = StateStore(CASES_DIR / "patent_cases.db")
+app.include_router(create_router(
+    _case_store,
+    WorkflowOrchestrator(_case_store),
+    ExaAdapter(),
+    CASES_DIR,
+))
 
 
 def _api_key_file_ref(provider: str) -> str:
@@ -66,7 +80,11 @@ def _safe_name(name: str) -> str:
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "engine": "opencode run"}
+    return {
+        "ok": True,
+        "engine": "opencode run",
+        "structuredIdeaBetaEnabled": STRUCTURED_IDEA_BETA_ENABLED,
+    }
 
 
 # ===== 配置管理（一键傻瓜式） =====
