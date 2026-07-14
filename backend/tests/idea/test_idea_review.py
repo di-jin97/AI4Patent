@@ -169,6 +169,28 @@ async def test_idea_search_provider_surfaces_bridge_failure():
     assert "unavailable" in (response.error or "")
 
 
+class _RecordingBridge:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    async def execute(self, tool_name: str, payload: dict) -> object:
+        self.calls.append((tool_name, payload))
+        return {"results": []}
+
+
+@pytest.mark.asyncio
+async def test_idea_exa_adapter_uses_remote_server_tool_names():
+    """OpenCode prefixes tools, but the direct remote MCP server does not."""
+    bridge = _RecordingBridge()
+    provider = ExaAdapter(bridge=bridge)
+
+    await provider.search(SearchRequest(request_id="direct-tool-search", query="cache", limit=5))
+    await provider.fetch(FetchRequest(request_id="direct-tool-fetch", urls=["https://example.test"]))
+
+    assert bridge.calls[0][0] == "web_search_exa"
+    assert bridge.calls[1][0] == "web_fetch_exa"
+
+
 @pytest.mark.asyncio
 async def test_legacy_idea_api_streams_agent_result(monkeypatch):
     """The existing IDEA-review endpoint remains usable while Case API is not yet P1 work."""

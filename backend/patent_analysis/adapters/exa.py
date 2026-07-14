@@ -31,7 +31,7 @@ class ExaAdapter(SearchProvider):
 
     async def search(self, request: SearchRequest) -> SearchResponse:
         try:
-            raw = await self._bridge.execute("exa_web_search_exa", {
+            raw = await self._bridge.execute("web_search_exa", {
                 "query": request.query,
                 "numResults": request.limit,
             })
@@ -55,7 +55,7 @@ class ExaAdapter(SearchProvider):
 
     async def fetch(self, request: FetchRequest) -> FetchResponse:
         try:
-            raw = await self._bridge.execute("exa_web_fetch_exa", {
+            raw = await self._bridge.execute("web_fetch_exa", {
                 "urls": request.urls,
                 "maxCharacters": request.max_characters,
             })
