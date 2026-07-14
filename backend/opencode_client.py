@@ -7,6 +7,8 @@ import json as _json
 import shutil
 from pathlib import Path
 
+from security import safe_json
+
 BASE = Path(__file__).resolve().parent.parent
 
 
@@ -39,22 +41,22 @@ def _log_event(t, part):
     elif t == "tool_start":
         tool = part.get("tool", "?")
         inp = part.get("input", {})
-        logger.info(f"  [tool_start] {tool}: {_json.dumps(inp, ensure_ascii=False)[:1000]}")
+        logger.info(f"  [tool_start] {tool}: {safe_json(inp)[:1000]}")
     elif t == "tool_finish":
         tool = part.get("tool", "?")
         out = part.get("output", part.get("result", ""))
-        out_s = out if isinstance(out, str) else _json.dumps(out, ensure_ascii=False)
+        out_s = out if isinstance(out, str) else safe_json(out)
         logger.info(f"  [tool_finish] {tool}: {out_s[:1000]}")
     elif t == "reasoning":
         txt = (part.get("text") or "").strip()
         if txt:
             logger.info(f"  [reasoning] {txt[:1000]}")
     elif t == "step_start":
-        logger.info(f"  [step_start] {_json.dumps(part, ensure_ascii=False)[:500]}")
+        logger.info(f"  [step_start] {safe_json(part)[:500]}")
     elif t == "step_finish":
-        logger.info(f"  [step_finish] {_json.dumps(part, ensure_ascii=False)[:500]}")
+        logger.info(f"  [step_finish] {safe_json(part)[:500]}")
     else:
-        logger.info(f"  [{t}] {_json.dumps(part, ensure_ascii=False)[:500]}")
+        logger.info(f"  [{t}] {safe_json(part)[:500]}")
 
 
 def kill_task(task_id):

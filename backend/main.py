@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from opencode_client import run_task, kill_current, kill_task
+from security import mask_secret, safe_json, write_secret_file
 
 BASE = Path(__file__).resolve().parent.parent
 FRONTEND = BASE / "frontend"
@@ -72,7 +73,6 @@ async def health():
 @app.get("/api/config")
 async def get_config():
     cfg_path = CONFIG_DIR / "opencode.json"
-    auth_path = DATA_DIR / "auth.json"
     result = {"configured": False, "provider": "", "model": "", "baseURL": "", "apiKey": ""}
     if cfg_path.exists():
         try:
@@ -88,17 +88,7 @@ async def get_config():
             cfg_key = _read_api_key_ref(p.get("options", {}).get("apiKey", ""))
             if cfg_key:
                 result["configured"] = True
-                result["apiKey"] = cfg_key[:6] + "***" + cfg_key[-4:] if len(cfg_key) > 12 else "***"
-        except Exception:
-            pass
-    if auth_path.exists():
-        try:
-            auth = json.loads(auth_path.read_text(encoding="utf-8"))
-            prov = result["provider"]
-            if prov and prov in auth and auth[prov].get("apiKey"):
-                result["configured"] = True
-                k = auth[prov]["apiKey"]
-                result["apiKey"] = k[:6] + "***" + k[-4:] if len(k) > 12 else "***"
+                result["apiKey"] = mask_secret(cfg_key)
         except Exception:
             pass
     return result
@@ -119,8 +109,7 @@ async def save_config(req: ConfigReq):
     apiKey = req.apiKey.strip()
     if not apiKey:
         return {"ok": False, "error": "API Key 不能为空"}
-    SECRET_DIR.mkdir(parents=True, exist_ok=True)
-    (SECRET_DIR / f"{provider}-api-key").write_text(apiKey, encoding="utf-8")
+    write_secret_file(SECRET_DIR / f"{provider}-api-key", apiKey)
     opencode_cfg = {
         "$schema": "https://opencode.ai/config.json",
         "model": f"{provider}/{model}",
@@ -149,12 +138,26 @@ async def save_config(req: ConfigReq):
     (CONFIG_DIR / "opencode.json").write_text(
         json.dumps(opencode_cfg, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    auth = {provider: {"apiKey": apiKey}}
-    (DATA_DIR / "auth.json").write_text(
-        json.dumps(auth, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    _remove_legacy_auth_key(DATA_DIR / "auth.json", provider)
     logger.info(f"配置已保存: {provider}/{model} @ {baseURL}")
     return {"ok": True, "model": f"{provider}/{model}"}
+
+
+def _remove_legacy_auth_key(auth_path: Path, provider: str) -> None:
+    """Remove the old duplicate API-key record, preserving unrelated auth data."""
+    if not auth_path.exists():
+        return
+    try:
+        auth = json.loads(auth_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(auth, dict) or provider not in auth:
+        return
+    auth.pop(provider, None)
+    if auth:
+        auth_path.write_text(json.dumps(auth, indent=2, ensure_ascii=False), encoding="utf-8")
+    else:
+        auth_path.unlink(missing_ok=True)
 
 
 # ===== 文件管理 =====
@@ -229,7 +232,7 @@ async def run(task: Task):
                 elif et == "log":
                     raw_t = evt.get("event_type", "?")
                     part = evt.get("part", {})
-                    logger.info(f"  [{raw_t}] {json.dumps(part, ensure_ascii=False)[:1000]}")
+                    logger.info(f"  [{raw_t}] {safe_json(part)[:1000]}")
                 elif et == "step":
                     logger.info("  [step]")
                 yield sse(evt)
