@@ -2,6 +2,8 @@
 
 基于 opencode 引擎的专利智能分析平台，集成 5 大专利分析模块，支持并行执行、文件上传下载、多轮追问。
 
+IDEA 评审的目标架构见 [设计文档](docs/patent-innovation-analysis-agent-design.md)，原始完整 Skill 与当前结构化 Beta 的能力边界见 [版本对比](docs/idea-review-version-comparison.md)。
+
 ## 功能模块
 
 | 模块 | Skill | 功能说明 |
