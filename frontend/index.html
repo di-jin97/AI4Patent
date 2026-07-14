@@ -84,8 +84,14 @@
   <textarea id="input" rows="3" placeholder=""></textarea>
   <div class="row">
    <button class="run" id="runBtn" onclick="run(false)">执行 ▶</button>
-    <button class="stop" id="stopBtn" style="display:none" onclick="stopCurrent()">⏹ 停止</button>
+   <button class="stop" id="stopBtn" style="display:none" onclick="stopCurrent()">⏹ 停止</button>
    <input id="model" value="deepseek/deepseek-v4-pro" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px;width:210px;">
+   <label id="ideaModeWrap" style="display:none;font-size:12px;color:#555">IDEA 模式
+     <select id="ideaMode" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px">
+       <option value="legacy">原 Skill（默认）</option>
+       <option value="structured">结构化 Beta</option>
+     </select>
+   </label>
     <span class="sel-hint" id="selHint"></span>
   </div>
   <div class="status" id="status"></div>
@@ -135,10 +141,13 @@ WF_KEYS.forEach(k => {
     taskId: null,
     followupVisible: false,
     followupInput: "",
+    caseId: null,
+    structured: false,
   };
 });
 let selectedFiles = new Set();
 let filePollTimer = null;
+let structuredIdeaBetaEnabled = false;
 
 function switchTab(newWf) {
   if (newWf === curWf) return;
@@ -160,12 +169,16 @@ function switchTab(newWf) {
   document.getElementById("followup").style.display = ns.followupVisible ? "block" : "none";
   document.getElementById("runBtn").disabled = ns.running;
   document.getElementById("stopBtn").style.display = ns.running ? "inline-block" : "none";
+  updateIdeaModeVisibility();
 }
 document.querySelectorAll(".wf").forEach(el => el.onclick = () => switchTab(el.dataset.wf));
 
 function updateTabIndicator(wfKey, running) {
   const tab = document.querySelector('.wf[data-wf="' + wfKey + '"]');
   if (tab) tab.classList.toggle("running", running);
+}
+function updateIdeaModeVisibility() {
+  document.getElementById("ideaModeWrap").style.display = structuredIdeaBetaEnabled && curWf === "idea" ? "inline-flex" : "none";
 }
 function anyRunning() { return WF_KEYS.some(k => wfState[k].running); }
 function startFilePollingIfNeeded() {
@@ -232,6 +245,10 @@ async function run(isFollowup) {
   }
   const model = document.getElementById("model").value.trim() || "deepseek/deepseek-v4-pro";
   const files = isFollowup ? [] : [...selectedFiles];
+  if (wfKey === "idea" && !isFollowup && structuredIdeaBetaEnabled && document.getElementById("ideaMode").value === "structured") {
+    await runStructuredIdea(text);
+    return;
+  }
   const fileHint = files.length ? `\n\n（请同时读取附带的文件：${files.join("、")})` : "";
   const prompt = isFollowup ? text : (TEMPLATES[wfKey] + text + fileHint + "\n\n（重要：请按skill流程完整执行全部步骤，全程在对话中输出分析结果，默认不要生成任何文件。全程不要向用户提问或等待确认，所有信息自行推断，一口气完成。）");
 
@@ -320,10 +337,78 @@ async function run(isFollowup) {
 
 async function stopCurrent() {
   const s = wfState[curWf];
-  if (!s.running || !s.taskId) return;
+  if (!s.running) return;
   try {
-    await fetch("/api/stop?task_id=" + encodeURIComponent(s.taskId), {method:"POST"});
+    if (s.structured && s.caseId) {
+      await fetch("/api/cases/" + encodeURIComponent(s.caseId) + "/cancel", {method:"POST"});
+    } else if (s.taskId) {
+      await fetch("/api/stop?task_id=" + encodeURIComponent(s.taskId), {method:"POST"});
+    }
   } catch(e) {}
+}
+
+async function runStructuredIdea(text) {
+  const wfKey = "idea";
+  const s = wfState[wfKey];
+  const out = document.getElementById("output");
+  s.running = true; s.structured = true; s.taskId = null; s.sessionId = null; s.followupVisible = false;
+  updateTabIndicator(wfKey, true);
+  out.innerHTML = ""; out.className = "panel";
+  document.getElementById("followup").style.display = "none";
+  document.getElementById("runBtn").disabled = true;
+  document.getElementById("stopBtn").style.display = "inline-block";
+  document.getElementById("status").innerHTML = '<span class="dot">⏳</span> 正在创建结构化案件...';
+  try {
+    const created = await fetch("/api/cases", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({idea:text})});
+    if (!created.ok) throw new Error("创建案件失败：HTTP " + created.status);
+    const caseData = await created.json();
+    s.caseId = caseData.case.id;
+    const started = await fetch("/api/cases/" + encodeURIComponent(s.caseId) + "/run", {method:"POST"});
+    if (!started.ok) throw new Error("启动案件失败：HTTP " + started.status);
+    document.getElementById("status").innerHTML = '<span class="dot">⏳</span> 结构化评审中...';
+
+    const events = await fetch("/api/cases/" + encodeURIComponent(s.caseId) + "/events");
+    if (!events.ok || !events.body) throw new Error("无法连接案件事件流");
+    const reader = events.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    let terminal = null;
+    while (true) {
+      const {done, value} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream:true});
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const line = block.split("\n").find(l => l.startsWith("data: ")); if (!line) continue;
+        const event = JSON.parse(line.slice(6));
+        if (event.type === "step_start") {
+          document.getElementById("status").innerHTML = '<span class="dot">⏳</span> 正在执行：' + event.step;
+        }
+        if (event.type === "case_terminal") terminal = event;
+      }
+    }
+    const finalResponse = await fetch("/api/cases/" + encodeURIComponent(s.caseId));
+    const finalState = await finalResponse.json();
+    const artifact = (finalState.artifacts || [])[0];
+    let report = "";
+    if (artifact) {
+      const reportResponse = await fetch("/api/cases/" + encodeURIComponent(s.caseId) + "/artifacts/" + encodeURIComponent(artifact.name));
+      if (reportResponse.ok) report = await reportResponse.text();
+    }
+    if (!report) report = "# 结构化 IDEA 评审\n\n```json\n" + JSON.stringify(finalState, null, 2) + "\n```";
+    const div = document.createElement("div");
+    if (window.marked) div.innerHTML = marked.parse(report); else div.textContent = report;
+    div.className = "md"; out.appendChild(div);
+    const status = terminal ? terminal.status : finalState.case.status;
+    document.getElementById("status").textContent = status === "COMPLETED" ? "✅ 结构化评审完成（Beta）" : "⚠️ 案件结束：" + status;
+    s.outputHtml = out.innerHTML; s.statusHtml = document.getElementById("status").innerHTML;
+  } catch(e) {
+    s.statusHtml = "❌ " + e;
+    document.getElementById("status").textContent = s.statusHtml;
+  } finally {
+    s.running = false;
+    updateTabIndicator(wfKey, false);
+    document.getElementById("runBtn").disabled = false;
+    document.getElementById("stopBtn").style.display = "none";
+  }
 }
 
 async function loadConfig() {
@@ -336,6 +421,14 @@ async function loadConfig() {
     if (c.baseURL) document.getElementById("cfgBaseURL").value = c.baseURL;
     document.getElementById("model").value = (c.provider ? c.provider + "/" : "") + (c.model || "deepseek-v4-pro");
   } catch(e) {}
+}
+async function loadFeatureFlags() {
+  try {
+    const r = await fetch("/api/health");
+    const health = await r.json();
+    structuredIdeaBetaEnabled = health.structuredIdeaBetaEnabled === true;
+    updateIdeaModeVisibility();
+  } catch(e) { structuredIdeaBetaEnabled = false; updateIdeaModeVisibility(); }
 }
 function openConfig() { document.getElementById("configOverlay").style.display = "block"; }
 async function saveConfig() {
@@ -358,6 +451,7 @@ async function saveConfig() {
 document.getElementById("input").placeholder = PLACEHOLDERS[curWf] || "";
 loadFiles();
 loadConfig();
+loadFeatureFlags();
 setInterval(() => { if (!anyRunning()) loadFiles(); }, 15000);
 </script>
 </body>
