@@ -14,6 +14,8 @@ from security import mask_secret, safe_json, write_secret_file
 from patent_analysis.adapters.google_patents import GooglePatentsAdapter
 from patent_analysis.api import create_router
 from patent_analysis.persistence.state_store import StateStore
+from patent_analysis.skills.runner import OpenCodeSkillRunner
+from patent_analysis.steps import build_default_steps
 from patent_analysis.workflow.orchestrator import WorkflowOrchestrator
 
 BASE = Path(__file__).resolve().parent.parent
@@ -51,6 +53,9 @@ app.include_router(create_router(
     WorkflowOrchestrator(_case_store),
     GooglePatentsAdapter(),
     CASES_DIR,
+    steps_factory=lambda provider, cases_root: build_default_steps(
+        provider, cases_root, OpenCodeSkillRunner()
+    ),
 ))
 
 

@@ -32,6 +32,8 @@
 
 默认：IDEA 页面选择结构化 1.0。直接 Google 访问需在确认来源政策后显式设定 `GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true`；ToolCall 会检查 robots、限速和缓存，不能访问时返回可解释失败而非空结论。
 
+运行中的 FastAPI 会显式使用 `OpenCodeSkillRunner` 来加载子 Skill。离线测试和未配置模型的嵌入式调用默认使用 `RuleBasedSkillRunner`，它保持同一 JSON 契约和证据规则，但不伪装为模型推理。
+
 立即回滚：启动前设置 `IDEA_STRUCTURED_BETA_ENABLED=false`，页面隐藏结构化选项并继续调用原 `patent-IDEA-analyzer`。
 
 ## 已验证范围与仍需人工复核
