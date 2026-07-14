@@ -161,3 +161,27 @@ backend/tests/patent_analysis/
 | Exa Adapter bridge | 已实现 |
 | Golden fixtures (离线可重现) | 已实现 (7/12 场景) |
 | 原始 Skill 未修改 | 已保留 |
+
+---
+
+## 2026-07-14: IDEA Review 验证与 P0 修正
+
+### 新增测试
+
+新增 `backend/tests/idea/`，用于覆盖 IDEA 评审的真实业务边界，而不把此类测试混入通用单元测试：
+
+1. 使用 `FakeSearchProvider` 的离线端到端链路：Idea 特征 → 搜索 → 去重 → 排序 → 全文抓取 → 证据 → 新颖性 → Quality Gate → SQLite State 持久化。
+2. Workflow checkpoint：每个步骤只能使 `PatentCaseState.revision` 增加一次。
+3. SearchProvider 失败语义：MCP bridge 不可用时必须返回 `failed`，不能以空结果伪装成功。
+4. 旧 `/api/run` IDEA SSE 边界：在 mock Agent 下保留 `patent-IDEA-analyzer` 的流式输出与 session ID。
+
+### 修正项
+
+- 修正 `WorkflowOrchestrator` 与 `StateStore` 对同一 checkpoint 各自递增 revision，导致每步 revision 增加两次的问题；现在只由 StateStore 持久化时递增。
+- OpenCode 1.17.18 未提供 `opencode mcp call` 子命令。桥接层现会将非零退出、超时、空输出明确转为异常，`ExaAdapter` 再返回结构化 `failed` 响应，避免误报成功。
+
+### 验证结果与边界
+
+- `backend/.venv/bin/python -m pytest backend/tests -q`：**111 passed**。
+- 实际 `opencode mcp list` 发现当前 `https://mcp.exa.ai/mcp` 连接失败（SSE error），因此真实 Exa 搜索/抓取不在本次通过范围内。
+- P0 是可测试的基础设施；现有 `/api/run` 仍直接启动原始 Skill，尚未接入 Case API、Workflow Orchestrator 和新 Provider。该接入属于设计文档的 P1-04，不能宣称已经完成新架构的端到端替换。

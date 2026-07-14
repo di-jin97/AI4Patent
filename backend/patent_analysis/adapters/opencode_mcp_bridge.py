@@ -14,6 +14,10 @@ from pathlib import Path
 from typing import Any
 
 
+class OpenCodeMCPBridgeError(RuntimeError):
+    """Raised when OpenCode cannot execute an MCP tool request."""
+
+
 class OpenCodeMCPBridge:
     """通过 OpenCode 子进程调用 MCP 工具"""
 
@@ -45,14 +49,31 @@ class OpenCodeMCPBridge:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=60
             )
-            output = stdout.decode("utf-8", errors="replace")
+            output = stdout.decode("utf-8", errors="replace").strip()
+            error_output = stderr.decode("utf-8", errors="replace").strip()
+
+            if proc.returncode != 0:
+                detail = error_output or output or f"exit code {proc.returncode}"
+                raise OpenCodeMCPBridgeError(
+                    f"MCP tool {tool_name} failed: {detail[:500]}"
+                )
+            if not output:
+                raise OpenCodeMCPBridgeError(
+                    f"MCP tool {tool_name} returned no output"
+                )
 
             try:
                 return json.loads(output)
             except json.JSONDecodeError:
                 return output
-        except Exception:
-            return None
+        except asyncio.TimeoutError as exc:
+            raise OpenCodeMCPBridgeError(
+                f"MCP tool {tool_name} timed out after 60 seconds"
+            ) from exc
+        except OSError as exc:
+            raise OpenCodeMCPBridgeError(
+                f"Could not start OpenCode for MCP tool {tool_name}: {exc}"
+            ) from exc
 
     def _opencode_exe(self) -> str:
         import shutil

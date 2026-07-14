@@ -34,6 +34,8 @@ class ExaAdapter(SearchProvider):
                 "query": request.query,
                 "numResults": request.limit,
             })
+            if raw is None:
+                raise RuntimeError("OpenCode MCP bridge returned no search response")
             results = self._parse_search_results(raw)
             return SearchResponse(
                 request_id=request.request_id,
@@ -56,6 +58,8 @@ class ExaAdapter(SearchProvider):
                 "urls": request.urls,
                 "maxCharacters": request.max_characters,
             })
+            if raw is None:
+                raise RuntimeError("OpenCode MCP bridge returned no fetch response")
             results = self._parse_fetch_results(raw, request.urls)
             return FetchResponse(
                 request_id=request.request_id,

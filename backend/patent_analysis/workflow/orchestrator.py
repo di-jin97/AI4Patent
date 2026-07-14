@@ -128,19 +128,18 @@ class WorkflowOrchestrator:
         cached = self._store.check_idempotency(key)
         if cached is not None:
             state.case.status = target
-            state.case.revision += 1
             return state
 
         assert_transition(from_status, target)
-        state.case.status = target
-        state.case.revision += 1
-        state.case.updated_at = _now()
         state.trace.append(TraceEvent(
             event=f"step_completed:{step.name}",
             step=step.name,
             detail={"from": from_status.value, "to": target.value},
         ))
 
+        # StateStore is the only component that mutates revision/status while
+        # persisting a checkpoint. Mutating them here as well used to make each
+        # workflow step advance the revision twice.
         self._store.save_checkpoint(
             state.case.id, from_status, target, state
         )
@@ -152,9 +151,7 @@ class WorkflowOrchestrator:
         to_status: CaseStatus, error_msg: str
     ) -> PatentCaseState:
         from_status = state.case.status
-        state.case.status = to_status
-        state.case.revision += 1
-        state.case.updated_at = _now()
+        assert_transition(from_status, to_status)
         state.errors.append(CaseError(
             code=f"STEP_FAILED:{step.name}",
             message=error_msg,
