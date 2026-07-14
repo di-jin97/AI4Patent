@@ -1,7 +1,10 @@
-"""OpenCode MCP bridge.
+"""Direct Streamable HTTP bridge for remote MCP tools.
 
-按 design doc Section 7.4 定义。
-当前未能直接调用 Exa MCP SDK，故此 bridge 通过 OpenCode session 调用 MCP 工具。
+The earlier implementation attempted to execute ``opencode mcp call``.  That
+subcommand does not exist in the installed OpenCode CLI, so a new workflow
+could never perform a real search.  This bridge is intentionally independent
+from OpenCode: it talks to the configured MCP endpoint using the official MCP
+Python client and can therefore be reused by other search providers.
 """
 
 from __future__ import annotations
@@ -9,78 +12,104 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import uuid
-from pathlib import Path
+from datetime import timedelta
 from typing import Any
+
+import httpx
+
+
+DEFAULT_EXA_MCP_URL = "https://mcp.exa.ai/mcp"
 
 
 class OpenCodeMCPBridgeError(RuntimeError):
-    """Raised when OpenCode cannot execute an MCP tool request."""
+    """Raised when a remote MCP tool request cannot be completed."""
 
 
 class OpenCodeMCPBridge:
-    """通过 OpenCode 子进程调用 MCP 工具"""
+    """Execute a remote MCP tool through Streamable HTTP.
 
-    def __init__(self) -> None:
-        self._base = Path(__file__).resolve().parent.parent.parent.parent
+    The legacy class name is retained to avoid breaking the existing
+    ``ExaAdapter`` API.  It no longer starts an OpenCode subprocess.
+    """
+
+    def __init__(
+        self,
+        url: str | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+        timeout_seconds: float = 60.0,
+    ) -> None:
+        self.url = url or os.environ.get("EXA_MCP_URL", DEFAULT_EXA_MCP_URL)
+        self.headers = dict(headers or self._headers_from_environment())
+        self.timeout_seconds = timeout_seconds
+
+    @staticmethod
+    def _headers_from_environment() -> dict[str, str]:
+        """Use an optional Exa key without putting it in versioned config."""
+        api_key = os.environ.get("EXA_API_KEY", "").strip()
+        return {"x-api-key": api_key} if api_key else {}
 
     async def execute(self, tool_name: str, payload: dict[str, Any]) -> Any:
-        """执行 MCP 工具调用. 返回 JSON 结果或原始文本."""
-        import subprocess
-
-        args = [
-            self._opencode_exe(),
-            "mcp", "call",
-            "--tool", tool_name,
-            "--payload", json.dumps(payload),
-        ]
-        env = os.environ.copy()
-        env["XDG_CONFIG_HOME"] = str(self._base / "config")
-        env["XDG_DATA_HOME"] = str(self._base / "data")
-
+        """Call an MCP tool and return structured data or decoded text."""
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-                cwd=str(self._base / "workspace"),
-            )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=60
-            )
-            output = stdout.decode("utf-8", errors="replace").strip()
-            error_output = stderr.decode("utf-8", errors="replace").strip()
+            from mcp import ClientSession
+            from mcp.client.streamable_http import streamable_http_client
 
-            if proc.returncode != 0:
-                detail = error_output or output or f"exit code {proc.returncode}"
-                raise OpenCodeMCPBridgeError(
-                    f"MCP tool {tool_name} failed: {detail[:500]}"
-                )
-            if not output:
-                raise OpenCodeMCPBridgeError(
-                    f"MCP tool {tool_name} returned no output"
-                )
-
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                return output
+            timeout = httpx.Timeout(self.timeout_seconds)
+            async with httpx.AsyncClient(
+                headers=self.headers,
+                timeout=timeout,
+                follow_redirects=True,
+            ) as client:
+                async with streamable_http_client(
+                    self.url, http_client=client
+                ) as (read_stream, write_stream, _):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        await session.initialize()
+                        result = await session.call_tool(
+                            tool_name,
+                            arguments=payload,
+                            read_timeout_seconds=timedelta(seconds=self.timeout_seconds),
+                        )
         except asyncio.TimeoutError as exc:
             raise OpenCodeMCPBridgeError(
-                f"MCP tool {tool_name} timed out after 60 seconds"
+                f"MCP tool {tool_name} timed out after {self.timeout_seconds:g} seconds"
             ) from exc
-        except OSError as exc:
+        except Exception as exc:
             raise OpenCodeMCPBridgeError(
-                f"Could not start OpenCode for MCP tool {tool_name}: {exc}"
+                f"MCP tool {tool_name} failed via {self.url}: {type(exc).__name__}: {exc}"
             ) from exc
 
-    def _opencode_exe(self) -> str:
-        import shutil
-        configured = os.environ.get("OPENCODE_EXE")
-        if configured:
-            return configured
-        system_opencode = shutil.which("opencode")
-        if system_opencode:
-            return system_opencode
-        return str(self._base / "bin" / "opencode" / "opencode.exe")
+        if getattr(result, "isError", False):
+            raise OpenCodeMCPBridgeError(
+                f"MCP tool {tool_name} returned an error: {_tool_error_text(result)}"
+            )
+        return decode_tool_result(result)
+
+
+def decode_tool_result(result: Any) -> Any:
+    """Convert an MCP ``CallToolResult`` into Python data for adapters."""
+    structured = getattr(result, "structuredContent", None)
+    if structured is not None:
+        return structured
+
+    texts: list[str] = []
+    for content in getattr(result, "content", []) or []:
+        text = getattr(content, "text", None)
+        if isinstance(text, str):
+            texts.append(text)
+    if not texts:
+        return None
+
+    combined = "\n".join(texts)
+    try:
+        return json.loads(combined)
+    except json.JSONDecodeError:
+        return combined
+
+
+def _tool_error_text(result: Any) -> str:
+    value = decode_tool_result(result)
+    if isinstance(value, str):
+        return value[:500]
+    return json.dumps(value, ensure_ascii=False, default=str)[:500]

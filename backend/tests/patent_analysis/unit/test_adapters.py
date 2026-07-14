@@ -7,6 +7,7 @@ import pytest
 
 from backend.patent_analysis.adapters.base import SearchRequest, SearchResponse, FetchRequest, FetchResponse, SearchResult
 from backend.patent_analysis.adapters.fake import FakeSearchProvider
+from backend.patent_analysis.adapters.exa import ExaAdapter
 from backend.patent_analysis.domain.models import PriorArtDocument
 from backend.patent_analysis.services.documents import (
     normalize_url,
@@ -75,6 +76,32 @@ class TestFakeProvider:
         await provider.search(req)
         assert len(provider.search_calls) == 1
         assert provider.search_calls[0].query == "test"
+
+
+class TestExaResponseParsing:
+    def test_parses_hosted_exa_text_response(self):
+        raw = """Title: Prior Art Search
+URL: https://example.test/prior-art
+Published: 2020-01-01
+Author: USPTO
+Highlights:
+Public information before filing can be prior art.
+
+Title: Another Result
+URL: https://example.test/other
+Published: N/A
+Author: N/A
+Highlights: A second record.
+"""
+
+        results = ExaAdapter._parse_search_results(raw)
+
+        assert len(results) == 2
+        assert results[0].title == "Prior Art Search"
+        assert results[0].published_date == "2020-01-01"
+        assert results[0].authors == ["USPTO"]
+        assert "Public information" in results[0].snippet
+        assert results[1].published_date is None
 
 
 # ─── URL Normalization ────────────────────────────────────────────────

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import Any
 
@@ -81,7 +82,7 @@ class ExaAdapter(SearchProvider):
             try:
                 raw = json.loads(raw)
             except json.JSONDecodeError:
-                return []
+                return _parse_exa_search_text(raw)
 
         items: list[dict] = []
         if isinstance(raw, dict):
@@ -129,3 +130,59 @@ class ExaAdapter(SearchProvider):
                 status="success" if content else "failed",
             ))
         return results
+
+
+_EXA_FIELD_RE = re.compile(r"^(Title|URL|Published|Author|Highlights):\s*(.*)$")
+
+
+def _parse_exa_search_text(text: str) -> list[SearchResult]:
+    """Parse Exa's human-readable MCP text response into provider records.
+
+    Hosted Exa commonly returns blocks such as ``Title:``, ``URL:``, and
+    ``Highlights:`` rather than JSON.  Treat unknown lines after Highlights as
+    part of the snippet so no evidence-bearing text is silently discarded.
+    """
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    active_field = ""
+
+    def finish_current() -> None:
+        if current.get("url") or current.get("title"):
+            entries.append(current.copy())
+        current.clear()
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        matched = _EXA_FIELD_RE.match(line)
+        if matched:
+            label, value = matched.groups()
+            key = {
+                "Title": "title",
+                "URL": "url",
+                "Published": "published_date",
+                "Author": "author",
+                "Highlights": "snippet",
+            }[label]
+            if key == "title" and current.get("title"):
+                finish_current()
+            current[key] = value.strip()
+            active_field = key
+        elif line and active_field == "snippet":
+            current["snippet"] = f"{current.get('snippet', '')} {line}".strip()
+    finish_current()
+
+    results = []
+    for item in entries:
+        published_date = item.get("published_date") or None
+        if published_date in {"N/A", "Unknown", "-"}:
+            published_date = None
+        authors = [item["author"]] if item.get("author") not in {None, "N/A", "Unknown", "-"} else []
+        if item.get("url"):
+            results.append(SearchResult(
+                title=item.get("title", ""),
+                url=item["url"],
+                snippet=item.get("snippet", ""),
+                published_date=published_date,
+                authors=authors,
+            ))
+    return results
