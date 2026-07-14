@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from opencode_client import run_task, kill_current, kill_task
 from security import mask_secret, safe_json, write_secret_file
-from patent_analysis.adapters.exa import ExaAdapter
+from patent_analysis.adapters.google_patents import GooglePatentsAdapter
 from patent_analysis.api import create_router
 from patent_analysis.persistence.state_store import StateStore
 from patent_analysis.workflow.orchestrator import WorkflowOrchestrator
@@ -42,12 +42,14 @@ logger = logging.getLogger("ai4p")
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 app = FastAPI(title="AI4P 专利工作台")
-STRUCTURED_IDEA_BETA_ENABLED = os.environ.get("IDEA_STRUCTURED_BETA_ENABLED", "false").lower() == "true"
+# IDEA Review 1.0 is the default path.  Set this to false for an immediate
+# legacy rollback; direct Google access remains a separate explicit opt-in.
+STRUCTURED_IDEA_BETA_ENABLED = os.environ.get("IDEA_STRUCTURED_BETA_ENABLED", "true").lower() == "true"
 _case_store = StateStore(CASES_DIR / "patent_cases.db")
 app.include_router(create_router(
     _case_store,
     WorkflowOrchestrator(_case_store),
-    ExaAdapter(),
+    GooglePatentsAdapter(),
     CASES_DIR,
 ))
 

@@ -4,7 +4,7 @@ import pytest
 
 from backend.patent_analysis.tools import (
     BiblioRequest, GooglePatentsProvider, PassageSearchRequest,
-    PatentSearchRequest, SectionRequest,
+    PatentSearchRequest, RelationsRequest, SectionRequest,
 )
 
 
@@ -17,6 +17,8 @@ _SEARCH_HTML = """
   <span class="snippet">Moves hot data based on temperature and wear.</span>
 </article>
 """
+
+_SEARCH_PAYLOAD = """{"results":{"num_page":0,"total_num_pages":2,"cluster":[{"result":[{"id":"patent/US1234567A1/en","patent":{"title":"Thermal aware data migration","snippet":"Moves hot data based on temperature and wear.","publication_number":"US1234567A1","publication_date":"2020-01-01","assignee":"Example Storage Inc.","inventor":"Ada Inventor"}}]}]}}"""
 
 _PATENT_HTML = """
 <html><head><meta name="DC.title" content="Thermal aware data migration" /></head><body>
@@ -36,7 +38,7 @@ _PATENT_HTML = """
 @pytest.fixture
 def provider():
     async def transport(url: str) -> str:
-        return _SEARCH_HTML if "?q=" in url else _PATENT_HTML
+        return _SEARCH_PAYLOAD if "xhr/query" in url else _PATENT_HTML
     return GooglePatentsProvider(transport=transport)
 
 
@@ -48,6 +50,7 @@ async def test_search_returns_normalized_source_facts(provider):
     assert response.query_echo == "thermal data migration"
     assert response.results[0].publication_number == "US1234567A1"
     assert response.results[0].assignee == "Example Storage Inc."
+    assert response.next_cursor == "1"
 
 
 @pytest.mark.asyncio
@@ -72,3 +75,18 @@ async def test_direct_network_is_disabled_without_explicit_opt_in():
     assert response.status == "failed"
     assert response.error is not None
     assert response.error.code == "ACCESS_DISABLED"
+
+
+@pytest.mark.asyncio
+async def test_relations_are_source_bounded_and_mark_missing_data():
+    async def transport(url: str) -> str:
+        return """<section class='family'><a href='/patent/US1A1/en'>family</a></section>
+        <section itemprop='referencesCited'><a href='/patent/US2A1/en'>citation</a></section>"""
+
+    response = await GooglePatentsProvider(transport=transport).get_relations(
+        RelationsRequest(request_id="relations", publication_number="US3A1")
+    )
+    assert response.status == "success"
+    assert response.relations.family_members == ["US1A1"]
+    assert response.relations.citations == ["US2A1"]
+    assert response.relations.completeness == "partial"

@@ -26,6 +26,7 @@ class CaseCreateRequest(BaseModel):
     mode: Literal["quick", "standard", "deep", "commercial"] = "standard"
     priority_date: str | None = None
     jurisdiction: list[str] = Field(default_factory=lambda: ["CN"])
+    requested_outputs: list[Literal["chat", "markdown", "json", "docx", "xlsx"]] = Field(default_factory=lambda: ["chat", "markdown", "json"])
 
 
 class CaseRuntime:
@@ -114,7 +115,7 @@ def create_router(
         case_id = f"case-{uuid.uuid4().hex}"
         state = PatentCaseState(
             case=CaseMeta(id=case_id, status=CaseStatus.CREATED),
-            request=CaseRequest(idea=request.idea),
+            request=CaseRequest(idea=request.idea, requested_outputs=request.requested_outputs),
             mode=request.mode,
             priority_date=request.priority_date,
             jurisdiction=request.jurisdiction,

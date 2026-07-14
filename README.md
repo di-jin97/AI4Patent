@@ -2,7 +2,7 @@
 
 基于 opencode 引擎的专利智能分析平台，集成 5 大专利分析模块，支持并行执行、文件上传下载、多轮追问。
 
-IDEA 评审的目标架构见 [设计文档](docs/patent-innovation-analysis-agent-design.md)，原始完整 Skill 与当前结构化 Beta 的能力边界见 [版本对比](docs/idea-review-version-comparison.md)。
+IDEA 评审的目标架构见 [设计文档](docs/patent-innovation-analysis-agent-design.md)，原始完整 Skill 与当前结构化 1.0 的能力边界见 [版本对比](docs/idea-review-version-comparison.md)。
 
 ## 功能模块
 
@@ -102,21 +102,27 @@ cd AI4Patent
 - **关键词搜索**：使用 `exa_web_search_exa` 搜索相关专利、论文、产品文档、白皮书
 - EXA 走海外服务器代理，不受本地网络限制，可访问 Google Patents 等海外站点
 
-### 结构化 IDEA 评审 Beta
+### 结构化 IDEA 评审 1.0
 
-原 `patent-IDEA-analyzer` Skill 仍是默认入口。需要试用可保存案件状态、SSE 进度、取消/恢复和 Markdown 报告的结构化流程时，在启动服务前设置：
+IDEA 页面默认走 `Case API → workflow → 渐进式 Skills → 自有 Google Patents ToolCall`。它会保存案件、SSE 进度、可恢复 checkpoint、全文定位证据、新颖性/创造性路线、商业预评估、模拟审查意见和八章报告。原 `patent-IDEA-analyzer` 保留为即时回滚入口。
+
+Google Patents 的直接访问默认关闭，避免未经确认的自动化访问。确认访问政策、网络与速率限制后再显式启用：
 
 ```bash
-export IDEA_STRUCTURED_BETA_ENABLED=true
+export GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true
 ```
 
-重启服务后，IDEA 页会显示“结构化 Beta”选项。Beta 缺少已验证的权利要求或段落证据时会将新颖性、创造性标为“不确定”，不会把检索摘要当作法律结论；关闭该环境变量即可立即回退原 Skill。
+若访问未启用或被 robots 拒绝，案件会以可解释错误结束，不会把空检索伪装成新颖性结论。需要立即回滚原 Skill 时设置：
+
+```bash
+export IDEA_STRUCTURED_BETA_ENABLED=false
+```
 
 ### 搜索 MCP 与密钥维护
 
 - **原 Skill 的 MCP 配置**：编辑 `config/opencode/opencode.json` 的 `mcp.exa`；可参考 `opencode.json.example`。
-- **结构化 Beta 的 Exa 地址**：用环境变量 `EXA_MCP_URL` 覆盖默认 `https://mcp.exa.ai/mcp`；如需更高配额，可通过未提交的环境变量 `EXA_API_KEY` 提供 Exa 密钥。
-- **更换搜索服务**：实现 `backend/patent_analysis/adapters/base.py` 的 `SearchProvider`，然后在 `backend/main.py` 注入新 Provider；不要把服务差异写入工作流或 Skill。
+- **结构化 IDEA 的 Google 数据层**：`backend/patent_analysis/tools/google_patents.py` 暴露独立的检索、书目信息、章节和段落匹配 ToolCall；`backend/patent_analysis/adapters/google_patents.py` 仅做工作流兼容适配。
+- **更换搜索服务**：实现 `backend/patent_analysis/tools/contracts.py` 的事实 ToolCall，再提供 `SearchProvider` 适配器并在 `backend/main.py` 注入；不要把服务差异写入工作流或 Skill。
 - **模型密钥**：只保存在 `config/opencode/secrets/<provider>-api-key`。不要把密钥写入 JSON、日志或版本库，也不要在共享终端执行会打印已解析配置的调试命令。曾暴露或写入历史的密钥必须先在供应商后台轮换，历史清理应在密钥失效后再进行。
 
 ## 技术架构

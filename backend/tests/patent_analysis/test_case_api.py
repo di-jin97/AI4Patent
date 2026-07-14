@@ -24,7 +24,7 @@ def _endpoints(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_case_api_runs_persisted_beta_workflow_and_writes_artifact(tmp_path: Path):
+async def test_case_api_runs_persisted_v1_workflow_and_writes_artifact(tmp_path: Path):
     endpoints = _endpoints(tmp_path)
     created = await endpoints["/api/cases"](CaseCreateRequest(idea="动态缓存；根据工作负载选择层级"))
     case_id = created["case"]["id"]
@@ -40,9 +40,9 @@ async def test_case_api_runs_persisted_beta_workflow_and_writes_artifact(tmp_pat
 
     assert state["case"]["status"] == "COMPLETED"
     assert state["novelty"]["overall"] == "uncertain"
-    assert state["artifacts"][0]["name"] == "idea-review-beta.md"
+    assert state["artifacts"][0]["name"] == "idea-review.md"
     artifact_response = await endpoints["/api/cases/{case_id}/artifacts/{artifact_name}"](
-        case_id, "idea-review-beta.md"
+        case_id, "idea-review.md"
     )
     assert Path(artifact_response.path).is_file()
 

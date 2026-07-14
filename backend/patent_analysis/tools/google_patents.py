@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import re
 import time
@@ -16,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from html import unescape
 from typing import Protocol
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -24,7 +25,8 @@ from bs4 import BeautifulSoup
 
 from .contracts import (
     BiblioRequest, BiblioResponse, PassageMatch, PassageSearchRequest,
-    PassageSearchResponse, PatentBiblio, PatentSearchRequest,
+    PassageSearchResponse, PatentBiblio, PatentSearchRequest, RelationsRequest,
+    RelationsResponse, PatentRelations,
     PatentSearchResponse, PatentSearchResult, SectionRequest, SectionResponse,
     TextSection, ToolError,
 )
@@ -68,13 +70,24 @@ class GooglePatentsProvider:
 
     async def search(self, request: PatentSearchRequest) -> PatentSearchResponse:
         query = _build_query(request)
-        url = f"{BASE_URL}/?q={quote_plus(query)}"
+        # The document page is a JavaScript shell.  Its own same-origin query
+        # endpoint returns the rendered result facts as JSON; it is still
+        # subject to the identical robots/rate/cache policy in ``_get``.
+        presentation_url = f"{BASE_URL}/?q={quote_plus(query)}"
+        encoded_query = quote(f"q={query}", safe="")
+        url = f"{BASE_URL}/xhr/query?url={encoded_query}"
+        if request.cursor:
+            url += f"&page={quote(str(request.cursor), safe='')}"
         try:
-            html = await self._get(url)
-            results, next_cursor = parse_search_html(html)
+            body = await self._get(url)
+            try:
+                results, next_cursor = parse_search_payload(json.loads(body))
+            except (json.JSONDecodeError, TypeError, KeyError):
+                # Kept for fixture compatibility and source layout changes.
+                results, next_cursor = parse_search_html(body)
             return PatentSearchResponse(
-                request_id=request.request_id, source=self.source, source_url=url,
-                content_hash=_hash(html), results=results[:request.limit],
+                request_id=request.request_id, source=self.source, source_url=presentation_url,
+                content_hash=_hash(body), results=results[:request.limit],
                 next_cursor=next_cursor, query_echo=query,
             )
         except GooglePatentsAccessError as exc:
@@ -104,6 +117,8 @@ class GooglePatentsProvider:
                 request_id=request.request_id, source=self.source, source_url=url,
                 content_hash=_hash(html), publication_number=request.publication_number,
                 sections=sections, raw_artifact_id=f"sha256:{_hash(html)}",
+                status="success" if sections else "partial",
+                error=None if sections else ToolError(code="NO_SECTIONS", message="Source page returned no requested text sections"),
             )
         except GooglePatentsAccessError as exc:
             return SectionResponse(request_id=request.request_id, status="failed", source=self.source, source_url=url, publication_number=request.publication_number, error=ToolError(code="ACCESS_DISABLED", message=str(exc)))
@@ -130,6 +145,22 @@ class GooglePatentsProvider:
             for score, section in sorted(scored, key=lambda item: item[0], reverse=True)[:request.max_passages_per_feature]:
                 matches.append(PassageMatch(feature_text=feature, locator=section.locator, text=section.text, score=score, content_hash=section.content_hash))
         return PassageSearchResponse(request_id=request.request_id, source=self.source, source_url=sections.source_url, publication_number=request.publication_number, matches=matches)
+
+    async def get_relations(self, request: RelationsRequest) -> RelationsResponse:
+        """Return only relations explicitly present in source HTML.
+
+        Relation markup varies by jurisdiction/page version. Missing markup is
+        reported as unavailable instead of being inferred.
+        """
+        url = patent_url(request.publication_number)
+        try:
+            html = await self._get(url)
+            relations = parse_relations_html(html)
+            return RelationsResponse(request_id=request.request_id, source=self.source, source_url=url, content_hash=_hash(html), publication_number=request.publication_number, relations=relations, status="success" if relations.completeness != "unavailable" else "partial")
+        except GooglePatentsAccessError as exc:
+            return RelationsResponse(request_id=request.request_id, status="failed", source=self.source, source_url=url, publication_number=request.publication_number, error=ToolError(code="ACCESS_DISABLED", message=str(exc)))
+        except Exception as exc:
+            return RelationsResponse(request_id=request.request_id, status="failed", source=self.source, source_url=url, publication_number=request.publication_number, error=ToolError(code="SOURCE_ERROR", message=str(exc), retryable=True))
 
     async def _get(self, url: str) -> str:
         if url in self._cache:
@@ -195,6 +226,34 @@ def parse_search_html(html: str) -> tuple[list[PatentSearchResult], str | None]:
     return results, next_cursor
 
 
+def parse_search_payload(payload: dict) -> tuple[list[PatentSearchResult], str | None]:
+    """Normalize the public page's result payload without adding conclusions."""
+    result_root = payload.get("results", {})
+    clusters = result_root.get("cluster", []) if isinstance(result_root, dict) else []
+    results: list[PatentSearchResult] = []
+    for cluster in clusters:
+        for item in cluster.get("result", []) if isinstance(cluster, dict) else []:
+            patent = item.get("patent", {}) if isinstance(item, dict) else {}
+            identifier = str(item.get("id", ""))
+            number = str(patent.get("publication_number", "")).strip() or _publication_from_url(identifier)
+            if not number:
+                continue
+            path = identifier.lstrip("/") or f"patent/{number}/en"
+            results.append(PatentSearchResult(
+                publication_number=number,
+                title=unescape(str(patent.get("title", "")).strip()),
+                url=f"{BASE_URL}/{path}",
+                snippet=unescape(re.sub(r"<[^>]+>", "", str(patent.get("snippet", "")).strip())),
+                publication_date=str(patent.get("publication_date", "")).strip() or None,
+                assignee=str(patent.get("assignee", "")).strip() or None,
+                inventors=[str(patent["inventor"]).strip()] if patent.get("inventor") else [],
+            ))
+    page = result_root.get("num_page") if isinstance(result_root, dict) else None
+    total_pages = result_root.get("total_num_pages") if isinstance(result_root, dict) else None
+    next_cursor = str(int(page) + 1) if isinstance(page, int) and isinstance(total_pages, int) and page + 1 < total_pages else None
+    return results, next_cursor
+
+
 def parse_biblio_html(html: str, publication_number: str, url: str) -> PatentBiblio:
     soup = BeautifulSoup(html, "html.parser")
     number = _meta(soup, "DC.publication") or _text(soup.select_one("dd[itemprop='publicationNumber'], meta[itemprop='publicationNumber']")) or publication_number
@@ -229,7 +288,7 @@ def parse_sections_html(html: str, request: SectionRequest) -> list[TextSection]
             output.append(_section("abstract", "abstract", text))
             remaining -= len(text)
     if "claims" in request.sections and remaining > 0:
-        claims = soup.select("div[itemprop='claims'] claim, section[itemprop='claims'] claim, [itemprop='claim']")
+        claims = soup.select("div[itemprop='claims'] claim, section[itemprop='claims'] claim, [itemprop='claim'], [itemprop='claims'] .claim-text")
         for index, claim in enumerate(claims, start=1):
             number = str(claim.get("num") or claim.get("data-claim-number") or index)
             if request.claim_numbers and number not in request.claim_numbers:
@@ -250,6 +309,18 @@ def parse_sections_html(html: str, request: SectionRequest) -> list[TextSection]
             if remaining <= 0:
                 break
     return output
+
+
+def parse_relations_html(html: str) -> PatentRelations:
+    soup = BeautifulSoup(html, "html.parser")
+
+    def numbers(selector: str) -> list[str]:
+        return list(dict.fromkeys(filter(None, (_publication_from_url(str(link.get("href", ""))) for link in soup.select(selector)))))
+
+    family = numbers("section.family a[href*='/patent/'], [itemprop='family'] a[href*='/patent/']")
+    citations = numbers("section[itemprop='referencesCited'] a[href*='/patent/'], [itemprop='referencesCited'] a[href*='/patent/']")
+    cited_by = numbers("section[itemprop='forwardReferences'] a[href*='/patent/'], [itemprop='forwardReferences'] a[href*='/patent/']")
+    return PatentRelations(family_members=family, citations=citations, cited_by=cited_by, completeness="partial" if family or citations or cited_by else "unavailable")
 
 
 def _section(section: str, locator: str, text: str, claim_number: str | None = None) -> TextSection:

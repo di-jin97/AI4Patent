@@ -135,3 +135,20 @@ class PassageMatch(BaseModel):
 class PassageSearchResponse(ToolResponse):
     publication_number: str
     matches: list[PassageMatch] = Field(default_factory=list)
+
+
+class RelationsRequest(BaseModel):
+    request_id: str
+    publication_number: str
+
+
+class PatentRelations(BaseModel):
+    family_members: list[str] = Field(default_factory=list)
+    cited_by: list[str] = Field(default_factory=list)
+    citations: list[str] = Field(default_factory=list)
+    completeness: Literal["complete", "partial", "unavailable"] = "unavailable"
+
+
+class RelationsResponse(ToolResponse):
+    publication_number: str
+    relations: PatentRelations = Field(default_factory=PatentRelations)

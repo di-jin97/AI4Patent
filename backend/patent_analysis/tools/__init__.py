@@ -9,6 +9,9 @@ from .contracts import (
     PatentSearchRequest,
     PatentSearchResponse,
     PatentSearchResult,
+    PatentRelations,
+    RelationsRequest,
+    RelationsResponse,
     SectionRequest,
     SectionResponse,
     TextSection,
@@ -19,5 +22,6 @@ __all__ = [
     "BiblioRequest", "BiblioResponse", "GooglePatentsProvider",
     "PassageSearchRequest", "PassageSearchResponse", "PatentBiblio",
     "PatentSearchRequest", "PatentSearchResponse", "PatentSearchResult",
+    "PatentRelations", "RelationsRequest", "RelationsResponse",
     "SectionRequest", "SectionResponse", "TextSection",
 ]

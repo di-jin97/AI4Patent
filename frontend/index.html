@@ -88,8 +88,8 @@
    <input id="model" value="deepseek/deepseek-v4-pro" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px;width:210px;">
    <label id="ideaModeWrap" style="display:none;font-size:12px;color:#555">IDEA 模式
      <select id="ideaMode" style="font-size:12px;border:1px solid #ccc;border-radius:6px;padding:5px 8px">
-       <option value="legacy">原 Skill（默认）</option>
-       <option value="structured">结构化 Beta</option>
+       <option value="structured" selected>结构化 IDEA 评审 1.0（默认）</option>
+       <option value="legacy">原 Skill（回滚）</option>
      </select>
    </label>
     <span class="sel-hint" id="selHint"></span>
@@ -398,7 +398,7 @@ async function runStructuredIdea(text) {
     if (window.marked) div.innerHTML = marked.parse(report); else div.textContent = report;
     div.className = "md"; out.appendChild(div);
     const status = terminal ? terminal.status : finalState.case.status;
-    document.getElementById("status").textContent = status === "COMPLETED" ? "✅ 结构化评审完成（Beta）" : "⚠️ 案件结束：" + status;
+    document.getElementById("status").textContent = status === "COMPLETED" ? "✅ 结构化 IDEA 评审完成" : "⚠️ 案件结束：" + status;
     s.outputHtml = out.innerHTML; s.statusHtml = document.getElementById("status").innerHTML;
   } catch(e) {
     s.statusHtml = "❌ " + e;
