@@ -19,5 +19,12 @@
         }
       }
     }
+  },
+  "mcp": {
+    "exa": {
+      "url": "https://mcp.exa.ai/mcp",
+      "type": "remote",
+      "enabled": true
+    }
   }
 }

@@ -107,6 +107,25 @@
 
 ## 最终统计
 
+## 2026-07-14: 结构化 IDEA 工作流挂载与 Exa 修复
+
+### 修改内容
+
+1. **安全加固**：模型密钥以原子写入和 owner-only 权限存入 secret 文件；移除重复 `data/auth.json` 存储；日志递归脱敏。
+2. **Exa Provider 修复**：以 MCP Python SDK 的 Streamable HTTP client 直连 Exa，移除不存在的 `opencode mcp call` 依赖；校正远程工具名为 `web_search_exa` / `web_fetch_exa`，并验证真实单结果检索链路。
+3. **Case API**：新增结构化案件创建、运行、SSE 事件、取消、恢复和报告下载；SQLite state/checkpoint 成为业务状态来源。
+4. **IDEA Beta UI**：通过 `IDEA_STRUCTURED_BETA_ENABLED=true` 显式启用，默认继续走原 Skill；无核验证据时强制输出不确定结论。
+
+### Git 提交
+
+- `安全：加固密钥存储与日志脱敏`
+- `修复：改用标准MCP客户端连接Exa检索`
+- `功能：挂载结构化IDEA案件工作流接口`
+- `界面：接入结构化IDEA评审Beta模式`
+- `修复：校正Exa远程MCP工具名称映射`
+
+---
+
 | 指标 | 数值 |
 |---|---|
 | 总测试数 | **107** (全部通过) |

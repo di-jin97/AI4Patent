@@ -100,6 +100,23 @@ cd AI4Patent
 - **关键词搜索**：使用 `exa_web_search_exa` 搜索相关专利、论文、产品文档、白皮书
 - EXA 走海外服务器代理，不受本地网络限制，可访问 Google Patents 等海外站点
 
+### 结构化 IDEA 评审 Beta
+
+原 `patent-IDEA-analyzer` Skill 仍是默认入口。需要试用可保存案件状态、SSE 进度、取消/恢复和 Markdown 报告的结构化流程时，在启动服务前设置：
+
+```bash
+export IDEA_STRUCTURED_BETA_ENABLED=true
+```
+
+重启服务后，IDEA 页会显示“结构化 Beta”选项。Beta 缺少已验证的权利要求或段落证据时会将新颖性、创造性标为“不确定”，不会把检索摘要当作法律结论；关闭该环境变量即可立即回退原 Skill。
+
+### 搜索 MCP 与密钥维护
+
+- **原 Skill 的 MCP 配置**：编辑 `config/opencode/opencode.json` 的 `mcp.exa`；可参考 `opencode.json.example`。
+- **结构化 Beta 的 Exa 地址**：用环境变量 `EXA_MCP_URL` 覆盖默认 `https://mcp.exa.ai/mcp`；如需更高配额，可通过未提交的环境变量 `EXA_API_KEY` 提供 Exa 密钥。
+- **更换搜索服务**：实现 `backend/patent_analysis/adapters/base.py` 的 `SearchProvider`，然后在 `backend/main.py` 注入新 Provider；不要把服务差异写入工作流或 Skill。
+- **模型密钥**：只保存在 `config/opencode/secrets/<provider>-api-key`。不要把密钥写入 JSON、日志或版本库，也不要在共享终端执行会打印已解析配置的调试命令。曾暴露或写入历史的密钥必须先在供应商后台轮换，历史清理应在密钥失效后再进行。
+
 ## 技术架构
 
 ```
