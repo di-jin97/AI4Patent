@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.patent_analysis.skills.runner import RuleBasedSkillRunner
+from backend.patent_analysis.skills.runner import RuleBasedSkillRunner, _parse_json
 
 
 @pytest.mark.asyncio
@@ -22,3 +22,13 @@ def test_all_v1_skill_prompts_are_progressively_loadable():
     for name in names:
         content = (root / name / "SKILL.md").read_text(encoding="utf-8")
         assert f"name: {name}" in content
+
+
+def test_skill_parser_accepts_explanation_followed_by_fenced_json():
+    raw = '''根据技能定义，我需要解析技术特征。
+
+```json
+{"features": [{"text": "双通道分割", "kind": "necessary", "limitation": "structural"}], "claims": [], "query_terms": ["OCR"]}
+```'''
+    parsed = _parse_json(raw)
+    assert parsed["features"][0]["text"] == "双通道分割"

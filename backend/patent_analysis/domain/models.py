@@ -287,6 +287,20 @@ class InventiveStepResult(BaseModel):
     evaluated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class ScoreCardItem(BaseModel):
+    """A 0--5 preliminary IDEA score with an explicit evidence state."""
+    score: float = Field(ge=0.0, le=5.0)
+    status: Literal["verified", "preliminary", "unavailable"]
+    reason: str = Field(min_length=1, max_length=180)
+
+
+class IdeaScoreCard(BaseModel):
+    innovation: ScoreCardItem
+    market_value: ScoreCardItem
+    infringement_evidence_availability: ScoreCardItem
+    avoidability: ScoreCardItem
+
+
 class CommercialValueResult(BaseModel):
     enforceability: dict[str, Any] = Field(default_factory=dict)
     avoidability: dict[str, Any] = Field(default_factory=dict)
@@ -294,6 +308,7 @@ class CommercialValueResult(BaseModel):
     standard_essential: dict[str, Any] = Field(default_factory=dict)
     maturity: dict[str, Any] = Field(default_factory=dict)
     implementer_analysis: dict[str, Any] = Field(default_factory=dict)
+    scorecard: IdeaScoreCard | None = None
     overall_confidence: float = Field(ge=0.0, le=1.0, default=0.0)
     evaluated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 

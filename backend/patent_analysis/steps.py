@@ -26,6 +26,7 @@ from .services.documents import deduplicate_documents, rank_documents
 from .services.novelty import evaluate_novelty
 from .services.quality import run_quality_gate
 from .services.renderers import render_docx, render_xlsx
+from .services.scorecard import build_idea_scorecard
 from .skills.runner import SkillRunner, default_skill_runner
 from .workflow.orchestrator import WorkflowStep
 
@@ -206,9 +207,9 @@ class CommercialValueStep(_Step):
         self.runner = runner
 
     async def run(self, state):
-        output = await self.runner.run("patent-commercial-value", {"features": [{"id": f.id, "text": f.text} for f in state.features], "documents": [{"id": d.id, "title": d.title} for d in state.documents], "inventiveness": state.inventiveness.model_dump() if state.inventiveness else {}})
+        output = await self.runner.run("patent-commercial-value", {"idea": state.request.idea, "features": [{"id": f.id, "text": f.text} for f in state.features], "documents": [{"id": d.id, "title": d.title} for d in state.documents], "inventiveness": state.inventiveness.model_dump() if state.inventiveness else {}})
         confidence = float(output.get("confidence", 0.0))
-        state.commercial_value = CommercialValueResult(enforceability={"claim_candidates": len(state.claims), "status": "preliminary"}, avoidability={"differentiating_features": len(state.features), "status": "preliminary"}, market_potential={"signals": output.get("market_signals", []), "risks": output.get("risks", [])}, overall_confidence=max(0.0, min(1.0, confidence)))
+        state.commercial_value = CommercialValueResult(enforceability={"claim_candidates": len(state.claims), "status": "preliminary"}, avoidability={"differentiating_features": len(state.features), "status": "preliminary"}, market_potential={"signals": output.get("market_signals", []), "risks": output.get("risks", [])}, scorecard=build_idea_scorecard(state), overall_confidence=max(0.0, min(1.0, confidence)))
         return state
 
 
@@ -336,9 +337,29 @@ def _render_markdown(state) -> str:
         return "\n".join(items) or "- 无"
     novelty = state.novelty.overall if state.novelty else "uncertain"
     inventive = state.inventiveness.overall if state.inventiveness else "uncertain"
+    scorecard = state.commercial_value.scorecard if state.commercial_value else None
+    score_rows = [
+        ("创新性", scorecard.innovation if scorecard else None, "第 5、6 章"),
+        ("市场价值", scorecard.market_value if scorecard else None, "第 7 章"),
+        ("侵权证据可获得性", scorecard.infringement_evidence_availability if scorecard else None, "第 7 章"),
+        ("可规避性", scorecard.avoidability if scorecard else None, "第 7 章"),
+    ]
+    score_table = "\n".join(
+        f"| {name} | {item.score:.1f} / 5 | {item.status} | {item.reason}（详见{chapter}） |"
+        if item else f"| {name} | 0.0 / 5 | unavailable | 尚未完成评分 |"
+        for name, item, chapter in score_rows
+    )
     return f"""# 专利 IDEA 结构化评审报告
 
 > 本报告基于可追溯检索和证据映射生成，不构成法律意见；“不确定”表示证据或检索范围不足，不能解释为肯定或否定结论。
+
+## 评审速览（标准化 0–5 分）
+
+> 1–5 分复用 PCT 评审量表；0 分仅表示当前缺少足以评分的证据，不表示该维度差。
+
+| 维度 | 评分 | 状态 | 简要理由 |
+| --- | --- | --- | --- |
+{score_table}
 
 ## 1. 需求与技术方案
 

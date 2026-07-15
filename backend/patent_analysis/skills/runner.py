@@ -100,15 +100,34 @@ def default_skill_runner() -> SkillRunner:
 
 def _parse_json(raw: str) -> dict[str, Any]:
     raw = raw.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.I)
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("Skill did not return a valid JSON object") from exc
-    if not isinstance(value, dict):
-        raise RuntimeError("Skill JSON output must be an object")
-    return value
+    # Models sometimes preface an otherwise valid object with one explanatory
+    # sentence or wrap it in a Markdown fence.  The workflow contract remains
+    # JSON-only, but the transport boundary must extract that object rather
+    # than turn a recoverable presentation deviation into a failed Case.
+    candidates = [raw]
+    candidates.extend(match.group(1).strip() for match in re.finditer(
+        r"```(?:json)?\s*(\{.*?\})\s*```", raw, flags=re.I | re.S
+    ))
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+            if isinstance(value, dict):
+                return value
+        except json.JSONDecodeError:
+            pass
+    # Last fallback supports prose before a bare JSON object, while preserving
+    # correct string escaping through JSONDecoder rather than regex parsing.
+    for index, char in enumerate(raw):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(raw[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise RuntimeError("Skill did not return a valid JSON object")
 
 
 def _first_clause(text: str) -> str:

@@ -50,10 +50,12 @@ async def test_v1_workflow_creates_evidence_bound_d1_d2_report_and_exports(tmp_p
     assert state["case"]["status"] == "COMPLETED"
     assert state["novelty"]["overall"] == "novel"  # No single document covers both features.
     assert state["inventiveness"]["overall"] == "not-inventive"
+    assert state["commercial_value"]["scorecard"]["innovation"]["score"] == 2
     assert len(state["evidence"]) == 2
     assert all(item["verified"] and item["quoted_text"] for item in state["evidence"])
     names = {item["name"] for item in state["artifacts"]}
     assert {"idea-review.md", "idea-review.json", "idea-review.docx", "idea-review.xlsx"} <= names
     report = (tmp_path / "cases" / case_id / "artifacts" / "idea-review.md").read_text(encoding="utf-8")
+    assert "## 评审速览（标准化 0–5 分）" in report
     assert "## 8. 审查意见与质量门" in report
     assert "ROUTE-001" in report
