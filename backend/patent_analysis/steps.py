@@ -77,10 +77,22 @@ class SearchPlanningStep(_Step):
         self.runner = runner
 
     async def run(self, state):
-        output = await self.runner.run("patent-search-planner", {
+        payload = {
             "idea": state.request.idea, "query_terms": state.invention.get("query_terms", []),
             "features": [{"id": item.id, "text": item.text} for item in state.features],
-        })
+        }
+        try:
+            output = await self.runner.run("patent-search-planner", payload)
+        except RuntimeError as exc:
+            # Search planning is non-evidentiary and has a deterministic
+            # fallback.  A presentation/tool-use failure from the model must
+            # not prevent the independent Google Patents retrieval stage.
+            output = _fallback_search_plan(payload)
+            state.invention.setdefault("skill_fallbacks", []).append({
+                "step": self.name,
+                "skill": "patent-search-planner",
+                "reason": str(exc),
+            })
         generator = IDGenerator()
         queries: list[Query] = []
         for item in output.get("queries", [])[:state.budget.max_search_calls]:
@@ -277,6 +289,21 @@ def build_default_steps(provider: SearchProvider, cases_root: Path, runner: Skil
 
 def _contains_cjk(text: str) -> bool:
     return any("\u4e00" <= char <= "\u9fff" for char in text)
+
+
+def _fallback_search_plan(payload: dict[str, Any]) -> dict[str, Any]:
+    terms = [str(item).strip() for item in payload.get("query_terms", []) if str(item).strip()]
+    if not terms:
+        terms = [str(item.get("text", "")).strip() for item in payload.get("features", []) if isinstance(item, dict) and str(item.get("text", "")).strip()]
+    core = " ".join(terms[:8])
+    expanded = " ".join(terms[:4])
+    return {
+        "queries": [
+            {"query_text": core, "phase": "A", "intent": "模型规划失败后的核心组合回退检索"},
+            {"query_text": expanded, "phase": "B", "intent": "模型规划失败后的关键特征回退检索"},
+        ],
+        "strategy": "确定性回退：模型未返回可用 JSON，按已解析技术特征生成检索式",
+    }
 
 
 def _normalize_feature(value: Any) -> dict[str, str] | None:

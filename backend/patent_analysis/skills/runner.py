@@ -13,7 +13,8 @@ import json
 import os
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 
@@ -26,29 +27,41 @@ class SkillRunner(ABC):
 class OpenCodeSkillRunner(SkillRunner):
     """Run a project Skill through OpenCode without sharing conversation state."""
 
-    def __init__(self, model: str | None = None) -> None:
+    def __init__(self, model: str | None = None, task_runner: Callable[..., Any] | None = None) -> None:
         self.model = model or os.environ.get("IDEA_SKILL_MODEL", "deepseek/deepseek-v4-pro")
+        self._task_runner = task_runner
 
     async def run(self, skill_name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         # Imported lazily so unit tests do not depend on app module import paths.
-        try:
-            from opencode_client import run_task
-        except ImportError:
-            from backend.opencode_client import run_task
+        if self._task_runner is not None:
+            run_task = self._task_runner
+        else:
+            try:
+                from opencode_client import run_task
+            except ImportError:
+                from backend.opencode_client import run_task
 
-        prompt = (
-            f"请加载并严格执行项目 Skill `{skill_name}`。\n"
-            "本次输入是受限 JSON 状态切片；不得假设看过其他上下文，不得编造来源。"
-            "只输出一个合法 JSON 对象，不要 Markdown。\nINPUT:\n"
-            + json.dumps(dict(payload), ensure_ascii=False)
-        )
+        prompt = _build_skill_prompt(skill_name, payload)
         output: list[str] = []
-        async for event in run_task(prompt, model=self.model):
+        attempted_tools: list[str] = []
+        # ``--pure`` removes external plugins.  The Skill body is injected by
+        # this boundary, so the model has no reason to load, write, or search
+        # through tools while producing a small JSON state slice.
+        async for event in run_task(prompt, model=self.model, pure=True):
             if event.get("type") == "output":
                 output.append(event.get("text", ""))
+            if event.get("type") == "log":
+                part = event.get("part") or {}
+                tool = part.get("tool")
+                if tool:
+                    attempted_tools.append(str(tool))
             if event.get("type") == "done" and event.get("result"):
                 output = [event["result"]]
-        return _parse_json("\n".join(output))
+        try:
+            return _parse_json("\n".join(output))
+        except RuntimeError as exc:
+            tool_detail = f"; attempted tools: {', '.join(dict.fromkeys(attempted_tools))}" if attempted_tools else ""
+            raise RuntimeError(f"Skill `{skill_name}` returned no valid textual JSON{tool_detail}") from exc
 
 
 class RuleBasedSkillRunner(SkillRunner):
@@ -96,6 +109,25 @@ class RuleBasedSkillRunner(SkillRunner):
 
 def default_skill_runner() -> SkillRunner:
     return OpenCodeSkillRunner() if os.environ.get("IDEA_SKILL_RUNNER", "").lower() == "opencode" else RuleBasedSkillRunner()
+
+
+def _build_skill_prompt(skill_name: str, payload: Mapping[str, Any]) -> str:
+    """Load exactly one progressive Skill without giving the model a tool task."""
+    root = Path(__file__).resolve().parents[3] / "config" / "opencode" / "skills"
+    path = (root / skill_name / "SKILL.md").resolve()
+    if root not in path.parents or not path.is_file():
+        raise ValueError(f"Unknown or unavailable Skill: {skill_name}")
+    skill_body = path.read_text(encoding="utf-8-sig")
+    return (
+        "你是工作流中的受限 JSON 转换节点。以下是本次唯一需要执行的 Skill；"
+        "它已经由后端加载，禁止再加载任何 Skill 或读取任何文件。\n\n"
+        f"<skill name=\"{skill_name}\">\n{skill_body}\n</skill>\n\n"
+        "硬性输出协议：不得调用任何工具（包括 skill、read、write、search、fetch）；"
+        "不得写文件；不得执行检索；不得解释、不得 Markdown。"
+        "你的最终且唯一输出必须是一个合法 JSON 对象，直接写在文本响应中。\n"
+        "INPUT JSON:\n"
+        + json.dumps(dict(payload), ensure_ascii=False)
+    )
 
 
 def _parse_json(raw: str) -> dict[str, Any]:

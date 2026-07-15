@@ -7,8 +7,8 @@ from backend.patent_analysis.domain.models import (
     PatentCaseState, PriorArtDocument,
 )
 from backend.patent_analysis.services.novelty import evaluate_novelty
-from backend.patent_analysis.steps import FeatureExtractionStep
-from backend.patent_analysis.skills.runner import RuleBasedSkillRunner, SkillRunner, _parse_json
+from backend.patent_analysis.steps import FeatureExtractionStep, SearchPlanningStep
+from backend.patent_analysis.skills.runner import OpenCodeSkillRunner, RuleBasedSkillRunner, SkillRunner, _build_skill_prompt, _parse_json
 
 
 @pytest.mark.asyncio
@@ -38,6 +38,24 @@ def test_skill_parser_accepts_explanation_followed_by_fenced_json():
 ```'''
     parsed = _parse_json(raw)
     assert parsed["features"][0]["text"] == "双通道分割"
+
+
+def test_runner_injects_one_skill_and_forbids_tool_calls():
+    prompt = _build_skill_prompt("patent-search-planner", {"query_terms": ["OCR"]})
+    assert "<skill name=\"patent-search-planner\">" in prompt
+    assert "不得调用任何工具" in prompt
+    assert "不得写文件" in prompt
+
+
+@pytest.mark.asyncio
+async def test_opencode_runner_uses_pure_mode_and_reports_tool_only_failure():
+    async def fake_run_task(*args, **kwargs):
+        assert kwargs["pure"] is True
+        yield {"type": "log", "part": {"tool": "write"}}
+        yield {"type": "done", "result": ""}
+
+    with pytest.raises(RuntimeError, match=r"attempted tools: write"):
+        await OpenCodeSkillRunner(task_runner=fake_run_task).run("patent-search-planner", {"query_terms": ["OCR"]})
 
 
 class _DeepSeekStyleFeatureRunner(SkillRunner):
@@ -85,3 +103,22 @@ def test_missing_priority_date_leaves_novelty_unassessed():
     )
     result = evaluate_novelty(state.features, state.documents, state.evidence, state.priority_date)
     assert result.overall == "uncertain"
+
+
+class _ToolOnlyPlannerRunner(SkillRunner):
+    async def run(self, skill_name, payload):
+        assert skill_name == "patent-search-planner"
+        raise RuntimeError("Skill `patent-search-planner` returned no valid textual JSON; attempted tools: write")
+
+
+@pytest.mark.asyncio
+async def test_search_planning_falls_back_when_model_uses_tools_instead_of_json():
+    state = PatentCaseState(
+        case=CaseMeta(id="planner-fallback-001", status=CaseStatus.FEATURES_EXTRACTED),
+        request=CaseRequest(idea="一个测试方案"), mode="standard", invention={"query_terms": ["OCR", "table"]},
+        features=[Feature(id="F-001", text="双通道分割", kind="necessary")],
+    )
+    state = await SearchPlanningStep(_ToolOnlyPlannerRunner()).run(state)
+    assert len(state.queries) == 2
+    assert state.queries[0].query_text == "OCR table"
+    assert state.invention["skill_fallbacks"][0]["step"] == "search_planning"

@@ -139,7 +139,7 @@ backend/.venv/bin/pip install -r backend/requirements.txt
 backend/.venv/bin/python -m pytest backend/tests -q
 ```
 
-预期结果为全部通过（当前基线为 136 项）。生产运行时需具备模型配置；
+预期结果为全部通过（当前基线为 139 项）。生产运行时需具备模型配置；
 Google Patents 访问默认启用；若显式关闭或来源拒绝访问，案件会明确失败，
 不会以空结果生成新颖性结论。
 

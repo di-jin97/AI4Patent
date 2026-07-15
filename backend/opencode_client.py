@@ -84,10 +84,13 @@ def kill_current():
             proc.kill()
 
 
-async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None, task_id=None):
+async def run_task(text, model=DEFAULT_MODEL, files=None, session_id=None, task_id=None, pure=False):
     """opencode run --format json。session_id 不为空时续接该 session（追问）。
     task_id 用于多模块并行时追踪/停止单个任务。"""
-    args = [OPENCODE_EXE, "run", "--format", "json", text]
+    args = [OPENCODE_EXE, "run", "--format", "json"]
+    if pure:
+        args.append("--pure")
+    args.append(text)
     if session_id:
         args += ["--session", session_id]
     else:

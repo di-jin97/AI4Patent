@@ -38,6 +38,6 @@
 
 ## 已验证范围与仍需人工复核
 
-- 自动化：Provider HTML/JSON fixture、Skill 契约、模型输出兼容、完整 D1/D2 离线案件、Case API/SSE、DOCX/XLSX、Golden cases 与前端默认入口，共 136 项测试。
+- 自动化：Provider HTML/JSON fixture、Skill 契约、模型输出兼容、工具调用降级、完整 D1/D2 离线案件、Case API/SSE、DOCX/XLSX、Golden cases 与前端默认入口，共 139 项测试。
 - 线上冒烟：Google Patents 搜索成功返回真实公开号 `EP3210121B1`；其公开详情页也成功返回可定位权利要求章节。
 - 仍需发布门槛：PRD 要求的 20 个真实代表性案例与人工双跑抽样尚未完成，因此结果应作为检索辅助和模拟审查意见，不构成法律意见。
