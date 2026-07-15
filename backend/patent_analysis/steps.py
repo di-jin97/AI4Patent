@@ -58,16 +58,16 @@ class FeatureExtractionStep(_Step):
         raw_features = output.get("features", [])
         state.features = [
             Feature(
-                id=generator.next("F"), text=str(item["text"]).strip(),
-                kind=item.get("kind", "necessary") if item.get("kind") in {"necessary", "optional"} else "necessary",
-                limitation=item.get("limitation", "functional") if item.get("limitation") in {"functional", "structural", "parameter", "step", "composition"} else "functional",
+                id=generator.next("F"), text=item["text"],
+                kind=item["kind"], limitation=item["limitation"],
             )
-            for item in raw_features if isinstance(item, dict) and str(item.get("text", "")).strip()
+            for item in (_normalize_feature(item) for item in raw_features)
+            if item is not None
         ]
         if not state.features:
             state.features = [Feature(id="F-001", text=state.request.idea.strip(), kind="necessary")]
-        state.claims = [item for item in output.get("claims", []) if isinstance(item, dict)]
-        state.invention["query_terms"] = [str(term) for term in output.get("query_terms", []) if str(term).strip()]
+        state.claims = _normalize_claims(output.get("claims", []))
+        state.invention["query_terms"] = _normalize_query_terms(output.get("query_terms", []))
         return state
 
 
@@ -279,6 +279,58 @@ def _contains_cjk(text: str) -> bool:
     return any("\u4e00" <= char <= "\u9fff" for char in text)
 
 
+def _normalize_feature(value: Any) -> dict[str, str] | None:
+    """Accept small, documented model-schema variations at the Skill boundary.
+
+    The canonical persisted schema remains ``necessary|optional`` plus a
+    limitation kind.  In particular, DeepSeek has returned ``essential`` /
+    ``complementary`` and boolean ``limitation`` values in production; neither
+    should silently turn a useful search plan into ``[\"zh\", \"en\"]``.
+    """
+    if not isinstance(value, dict):
+        return None
+    text = str(value.get("text", "")).strip()
+    if not text:
+        return None
+    raw_kind = str(value.get("kind", "necessary")).strip().lower()
+    kind = "optional" if raw_kind in {"optional", "complementary", "secondary", "可选", "补充"} else "necessary"
+    raw_limitation = value.get("limitation")
+    limitation = raw_limitation if raw_limitation in {"functional", "structural", "parameter", "step", "composition"} else _limitation_from_text(text)
+    return {"text": text, "kind": kind, "limitation": limitation}
+
+
+def _normalize_claims(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    claims: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if isinstance(item, dict) and str(item.get("text", "")).strip():
+            claims.append(item)
+        elif isinstance(item, str) and item.strip():
+            claims.append({"type": "independent" if index == 0 else "dependent", "text": item.strip()})
+    return claims
+
+
+def _normalize_query_terms(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        values = [term for group in value.values() if isinstance(group, list) for term in group]
+    elif isinstance(value, list):
+        values = value
+    else:
+        values = []
+    return list(dict.fromkeys(str(term).strip() for term in values if str(term).strip()))
+
+
+def _limitation_from_text(text: str) -> str:
+    if any(word in text for word in ("步骤", "方法", "执行", "输入", "输出", "生成", "融合", "分割")):
+        return "step"
+    if any(word in text for word in ("装置", "模块", "结构", "组件", "编码器", "解码器", "检测器")):
+        return "structural"
+    if any(word in text for word in ("比例", "温度", "阈值", "参数", "维度", "范围")):
+        return "parameter"
+    return "functional"
+
+
 def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -380,6 +432,7 @@ def _render_markdown(state) -> str:
 ## 5. 新颖性分析
 
 - 结论：{novelty}
+- 优先权日：{state.priority_date or "未提供（不作日期有效性评审）"}
 {rows([f'- {item.id} / {item.document_id} / {item.location_type}：{item.quoted_text}' for item in state.evidence])}
 
 ## 6. 创造性分析

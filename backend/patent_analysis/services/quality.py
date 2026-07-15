@@ -58,7 +58,7 @@ def run_quality_gate(state: PatentCaseState) -> QualityGateResult:
             for issue in issues:
                 errors.append(_to_dict(issue))
 
-    if state.novelty and state.novelty.overall == "not-novel":
+    if state.priority_date and state.novelty and state.novelty.overall == "not-novel":
         necessary_ids = [f.id for f in state.features if f.kind == "necessary"]
         covered: set[str] = set()
         for ev in state.evidence:
@@ -74,7 +74,7 @@ def run_quality_gate(state: PatentCaseState) -> QualityGateResult:
                 "message": f"Novelty conclusion is 'not-novel' but features {sorted(missing)} have no verified evidence",
             })
 
-    if state.novelty and state.novelty.overall == "not-novel":
+    if state.priority_date and state.novelty and state.novelty.overall == "not-novel":
         doc_ids_used = set(
             ev.document_id for ev in state.evidence
             if ev.verified and ev.has_location()

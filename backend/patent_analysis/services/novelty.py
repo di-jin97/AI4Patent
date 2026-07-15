@@ -58,7 +58,16 @@ def evaluate_novelty(
             if not covered:
                 break
         else:
-            if priority_date and not is_valid_prior_art(doc.publication_date, priority_date):
+            if not priority_date:
+                # A matching document is useful retrieval evidence, but without
+                # a user-supplied priority date it cannot support a legal
+                # novelty conclusion.  Do not silently treat every document as
+                # pre-priority prior art.
+                coverage["_date_valid"] = "unassessed"
+                coverage["_complete"] = "unassessed"
+                doc_evidence_ids = [ev.id for ev in doc_evs]
+                all_evidence_ids.extend(doc_evidence_ids)
+            elif not is_valid_prior_art(doc.publication_date, priority_date):
                 coverage["_date_valid"] = "no"
             else:
                 doc_evidence_ids = [ev.id for ev in doc_evs]
@@ -80,7 +89,9 @@ def evaluate_novelty(
             "evidence_ids": doc_evidence_ids,
         })
 
-    if any_not_novel:
+    if not priority_date and documents:
+        overall = "uncertain"
+    elif any_not_novel:
         overall = "not-novel"
     elif not by_document and not documents:
         overall = "novel"

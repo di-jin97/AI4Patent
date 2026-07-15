@@ -1,8 +1,9 @@
-"""Google Patents fact provider with conservative access controls.
+"""Google Patents fact provider with source-respecting access controls.
 
 This module does not bypass robots, authentication, bot detection, or source
-limits.  Production callers must explicitly opt in to direct access; tests use
-an injected transport and never make a network request.
+limits.  Direct access is enabled for this self-hosted application by default,
+but can be explicitly disabled through ``GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED``.
+Tests use an injected transport and never make a network request.
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ class GooglePatentsProvider:
         self.direct_access_enabled = (
             direct_access_enabled
             if direct_access_enabled is not None
-            else os.environ.get("GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED", "false").lower() == "true"
+            else os.environ.get("GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED", "true").lower() == "true"
         )
         self.min_interval_seconds = min_interval_seconds
         self._transport = transport
@@ -170,7 +171,7 @@ class GooglePatentsProvider:
             self._cache[url] = content
             return content
         if not self.direct_access_enabled:
-            raise GooglePatentsAccessError("Direct Google Patents access is disabled; set GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true after confirming source access policy")
+            raise GooglePatentsAccessError("Direct Google Patents access is disabled by GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=false")
         await self._respect_access_policy(url)
         async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True) as client:
             response = await client.get(url)

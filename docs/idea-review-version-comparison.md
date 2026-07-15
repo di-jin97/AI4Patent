@@ -30,7 +30,7 @@
 
 ## 运行与回滚
 
-默认：IDEA 页面选择结构化 1.0。直接 Google 访问需在确认来源政策后显式设定 `GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true`；ToolCall 会检查 robots、限速和缓存，不能访问时返回可解释失败而非空结论。
+默认：IDEA 页面选择结构化 1.0，Google Patents 直接访问默认启用。可通过 `GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=false` 在受限部署中关闭；ToolCall 会检查 robots、限速和缓存，不能访问时返回可解释失败而非空结论。
 
 运行中的 FastAPI 会显式使用 `OpenCodeSkillRunner` 来加载子 Skill。离线测试和未配置模型的嵌入式调用默认使用 `RuleBasedSkillRunner`，它保持同一 JSON 契约和证据规则，但不伪装为模型推理。
 
@@ -38,6 +38,6 @@
 
 ## 已验证范围与仍需人工复核
 
-- 自动化：Provider HTML/JSON fixture、Skill 契约、完整 D1/D2 离线案件、Case API/SSE、DOCX/XLSX、Golden cases 与前端默认入口，共 131 项测试。
+- 自动化：Provider HTML/JSON fixture、Skill 契约、模型输出兼容、完整 D1/D2 离线案件、Case API/SSE、DOCX/XLSX、Golden cases 与前端默认入口，共 135 项测试。
 - 线上冒烟：Google Patents 搜索成功返回真实公开号 `EP3210121B1`；其公开详情页也成功返回可定位权利要求章节。
 - 仍需发布门槛：PRD 要求的 20 个真实代表性案例与人工双跑抽样尚未完成，因此结果应作为检索辅助和模拟审查意见，不构成法律意见。

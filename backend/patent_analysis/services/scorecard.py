@@ -36,9 +36,10 @@ def build_idea_scorecard(state) -> IdeaScoreCard:
 
 
 def _innovation_score(state) -> ScoreCardItem:
-    # A priority date is indispensable to an evidence-bound novelty score.
+    # No priority date means date validity is deliberately not assessed.  This
+    # is unavailable, not an adverse innovation judgement.
     if not state.priority_date:
-        return ScoreCardItem(score=0, status="unavailable", reason="未提供优先权日，无法确认检索文献是否构成有效现有技术。")
+        return ScoreCardItem(score=0, status="unavailable", reason="未提供优先权日：已按无优先权日处理，不作基于日期有效性的创新性评分。")
     if not state.evidence or not state.novelty:
         return ScoreCardItem(score=0, status="unavailable", reason="尚无经定位和日期校验的对比证据，暂不评分。")
     if state.novelty.overall == "not-novel":

@@ -106,10 +106,10 @@ cd AI4Patent
 
 IDEA 页面默认走 `Case API → workflow → 渐进式 Skills → 自有 Google Patents ToolCall`。它会保存案件、SSE 进度、可恢复 checkpoint、全文定位证据、新颖性/创造性路线、商业预评估、模拟审查意见和八章报告。原 `patent-IDEA-analyzer` 保留为即时回滚入口。
 
-Google Patents 的直接访问默认关闭，避免未经确认的自动化访问。确认访问政策、网络与速率限制后再显式启用：
+Google Patents 的直接访问在本项目默认开启，并仍会遵守 robots、限速和缓存。需要在受限部署中关闭时设置：
 
 ```bash
-export GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true
+export GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=false
 ```
 
 若访问未启用或被 robots 拒绝，案件会以可解释错误结束，不会把空检索伪装成新颖性结论。需要立即回滚原 Skill 时设置：
@@ -139,8 +139,8 @@ backend/.venv/bin/pip install -r backend/requirements.txt
 backend/.venv/bin/python -m pytest backend/tests -q
 ```
 
-预期结果为全部通过（当前基线为 131 项）。生产运行时需同时具备模型配置和
-`GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED=true`；未启用或来源拒绝访问时，案件会明确失败，
+预期结果为全部通过（当前基线为 135 项）。生产运行时需具备模型配置；
+Google Patents 访问默认启用；若显式关闭或来源拒绝访问，案件会明确失败，
 不会以空结果生成新颖性结论。
 
 将已验证的 `bok` 集成回稳定分支时，建议在代码评审后执行：

@@ -2,7 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from backend.patent_analysis.skills.runner import RuleBasedSkillRunner, _parse_json
+from backend.patent_analysis.domain.models import (
+    CaseMeta, CaseRequest, CaseStatus, EvidenceItem, Feature,
+    PatentCaseState, PriorArtDocument,
+)
+from backend.patent_analysis.services.novelty import evaluate_novelty
+from backend.patent_analysis.steps import FeatureExtractionStep
+from backend.patent_analysis.skills.runner import RuleBasedSkillRunner, SkillRunner, _parse_json
 
 
 @pytest.mark.asyncio
@@ -32,3 +38,50 @@ def test_skill_parser_accepts_explanation_followed_by_fenced_json():
 ```'''
     parsed = _parse_json(raw)
     assert parsed["features"][0]["text"] == "双通道分割"
+
+
+class _DeepSeekStyleFeatureRunner(SkillRunner):
+    async def run(self, skill_name, payload):
+        assert skill_name == "patent-feature-parser"
+        return {
+            "features": [
+                {"text": "将图像拆分为两个并行区域", "kind": "essential", "limitation": True},
+                {"text": "以标准化向量记录层级", "kind": "complementary", "limitation": False},
+            ],
+            "claims": ["一种图像处理方法", "根据权利要求1所述的方法"],
+            "query_terms": {"zh": ["双通道分割", "层级向量"], "en": ["dual-channel segmentation"]},
+        }
+
+
+@pytest.mark.asyncio
+async def test_feature_step_normalizes_deepseek_style_schema():
+    state = PatentCaseState(
+        case=CaseMeta(id="feature-schema-001", status=CaseStatus.INTAKE_PARSED),
+        request=CaseRequest(idea="一个测试方案"),
+        mode="standard",
+        invention={},
+    )
+    state = await FeatureExtractionStep(_DeepSeekStyleFeatureRunner()).run(state)
+    assert [(item.kind, item.limitation) for item in state.features] == [
+        ("necessary", "functional"), ("optional", "functional"),
+    ]
+    assert state.invention["query_terms"] == ["双通道分割", "层级向量", "dual-channel segmentation"]
+    assert state.claims[0]["type"] == "independent"
+
+
+def test_missing_priority_date_leaves_novelty_unassessed():
+    state = PatentCaseState(
+        case=CaseMeta(id="no-priority-001", status=CaseStatus.EVIDENCE_EXTRACTED),
+        request=CaseRequest(idea="一个测试方案"),
+        mode="standard",
+        invention={},
+        features=[Feature(id="F-001", text="双通道分割", kind="necessary")],
+        documents=[PriorArtDocument(id="DOC-001", type="patent", publication_date="2020-01-01")],
+        evidence=[EvidenceItem(
+            id="EV-001", document_id="DOC-001", source_type="patent",
+            location_type="claim", claim_number="1", feature_ids=["F-001"],
+            quoted_text="双通道分割", verified=True, verification_method="source-fetch",
+        )],
+    )
+    result = evaluate_novelty(state.features, state.documents, state.evidence, state.priority_date)
+    assert result.overall == "uncertain"

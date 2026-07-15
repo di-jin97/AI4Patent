@@ -77,6 +77,11 @@ async def test_direct_network_is_disabled_without_explicit_opt_in():
     assert response.error.code == "ACCESS_DISABLED"
 
 
+def test_direct_network_is_enabled_by_default_for_the_self_hosted_app(monkeypatch):
+    monkeypatch.delenv("GOOGLE_PATENTS_DIRECT_ACCESS_ENABLED", raising=False)
+    assert GooglePatentsProvider().direct_access_enabled is True
+
+
 @pytest.mark.asyncio
 async def test_relations_are_source_bounded_and_mark_missing_data():
     async def transport(url: str) -> str:
